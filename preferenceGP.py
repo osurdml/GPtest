@@ -61,9 +61,9 @@ def calc_W(uvi, y, f, sigma):
     N_z = std_norm_pdf(z)
     # First derivative (Jensen and Nielsen)
     dpy_df = np.zeros((nx,1), dtype='float')
-    dpyuv_df = -y*i2sig*N_z/phi_z
-    dpy_df[uvi[:,0]] += dpyuv_df # This implements I_k
-    dpy_df[uvi[:,1]] += -dpyuv_df
+    dpyuv_df = y*i2sig*N_z/phi_z
+    dpy_df[uvi[:,0]] += -dpyuv_df # This implements I_k (note switch because Jensen paper has funky backwards z_k)
+    dpy_df[uvi[:,1]] += dpyuv_df
     
     inner = -(i2sig**2)*(z*N_z/phi_z + (N_z/phi_z)**2)
     W = np.zeros((nx,nx), dtype='float')
@@ -136,7 +136,7 @@ iKxx = np.linalg.solve(L.T,np.linalg.solve(L,Ix))
 # detK = (np.product(L.diagonal()))**2
 # log_det_K = np.sum(np.log(L.diagonal()))
 
-# First, solve for \hat{f} and W (mode finding Laplace approximation)
+# First, solve for \hat{f} and W (mode finding Laplace approximation, Newton-Raphson)
 f_error = delta_f + 1
 stopped = False
 f_true = true_function(x_train)
