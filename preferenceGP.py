@@ -50,9 +50,9 @@ def s_k_chu(x, uv): # Chu and Gharamani
 
 def I_k(x, uv): # Jensen and Nielsen
     if x == uv[0]:
-        return 1
-    elif x == uv[1]:
         return -1
+    elif x == uv[1]:
+        return 1
     else:
         return 0
 
@@ -63,7 +63,7 @@ def z_k_chu(uvi, f, sigma):
     
 def z_k(uvi, f, sigma, y):
     zc, i2sig = z_k_chu(uvi, f, sigma)
-    return y*zc, i2sig
+    return -y*zc, i2sig
     
 def calc_W_chu(uvi, y, f, sigma):
     nx = len(f)
@@ -97,7 +97,7 @@ def calc_W(uvi, y, f, sigma):
     N_z = std_norm_pdf(z)
     # First derivative (Jensen and Nielsen)
     dpy_df = np.zeros((nx,1), dtype='float')
-    dpyuv_df = y*i2sig*N_z/phi_z
+    dpyuv_df = -y*i2sig*N_z/phi_z
     dpy_df[uvi[:,0]] += dpyuv_df # This implements I_k
     dpy_df[uvi[:,1]] += -dpyuv_df
     
