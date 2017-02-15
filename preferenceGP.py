@@ -48,7 +48,7 @@ def I_k(x, uv): # Jensen and Nielsen
         return 0
 
 def z_k(uvi, f, sigma, y):
-    i2sig = 1.0 / (2 * np.sqrt(sigma))
+    i2sig = 1.0 / (sigma * np.sqrt(2.0))
     zc = i2sig*(f[uvi[:,1]]-f[uvi[:,0]])
     return y*zc, i2sig
     
