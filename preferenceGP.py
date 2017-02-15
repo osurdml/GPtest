@@ -3,21 +3,20 @@ import numpy as np
 import scipy.optimize as op
 import matplotlib.pyplot as plt
 import GPr
-#from GPy.utils.univariate_Gaussian import std_norm_cdf, std_norm_pdf
 from scipy.special import ndtr as std_norm_cdf
+
+log_hyp = np.log([0.1,0.2,0.5,0.1]) # sigma_probit, length_scale, sigma_f, sigma_n
+np.random.seed(1)
+
+n_train = 20
+true_sigma = 0.05
+delta_f = 1e-5
 
 #define a standard normal pdf
 _sqrt_2pi = np.sqrt(2*np.pi)
 def std_norm_pdf(x):
     x = np.clip(x,-1e150,1e150)
-    return np.exp(-np.square(x)/2)/_sqrt_2pi
-    
-    
-np.random.seed(0)
-
-n_train = 20
-true_sigma = 0.05
-delta_f = 1e-3
+    return np.exp(-(x**2)/2)/_sqrt_2pi
 
 # Define polynomial function to be modelled
 def true_function(x):
@@ -114,7 +113,7 @@ ha.set_xlabel('x')
 
 # GP hyperparameters
 # note: using log scaling to aid learning hyperparameters with varied magnitudes
-log_hyp = np.log([0.1,0.1,1,0.1]) # sigma_probit, length_scale, sigma_f, sigma_n
+
 mean_hyp = 0
 like_hyp = 0
 
@@ -124,6 +123,7 @@ initGP = GPr.GaussianProcess(log_hyp[1:],mean_hyp,like_hyp,"SE","zero","zero",x_
 # FOr a set of hyperparameters, return log likelihood that can be used by an optimiser
 theta0 = log_hyp
 
+theta_converged = False
 #while not theta_converged:
 initGP.log_hyp = theta0[1:] # Note that theta[0] is sigma, the noise in the probit
 f = np.zeros((x_train.shape[0],1))
@@ -138,9 +138,9 @@ iKxx = np.linalg.solve(L.T,np.linalg.solve(L,Ix))
 
 # First, solve for \hat{f} and W (mode finding Laplace approximation, Newton-Raphson)
 f_error = delta_f + 1
-stopped = False
+laplace_converged = False
 f_true = true_function(x_train)
-while not stopped:
+while not laplace_converged:
     W,dpy_df = calc_W(uvi_train, y_train, f, np.exp(theta0[0]))
     g = (iKxx + W)
     f_new = np.matmul(np.linalg.inv(g), np.matmul(W,f) + dpy_df)
@@ -149,7 +149,7 @@ while not stopped:
     print f_error, psi_rasmussen(uvi_train, y_train, f_new, iKxx, np.exp(theta0[0]))
     f = f_new
     if f_error < delta_f:
-        stopped = True
+        laplace_converged = True
 
 ha.plot(x_train, f_new, 'g^')
 plt.show()
