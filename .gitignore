@@ -1,0 +1,6 @@
+*.py[cod]
+*~
+vid/*
+data/*
+fig/*
+doc/*
