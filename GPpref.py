@@ -1,8 +1,5 @@
 # Simple 1D GP classification example
 import numpy as np
-import scipy.optimize as op
-import matplotlib.pyplot as plt
-import GPr
 import GPy
 from scipy.special import ndtr as std_norm_cdf
 
@@ -98,45 +95,67 @@ class PrefProbit(object):
 
 class PreferenceGaussianProcess(object):
 
-    def __init__(self, x_train, uvi_train, y_train, likelihood=PrefProbit):
+    def __init__(self, x_train, uvi_train, y_train, likelihood=PrefProbit, delta_f = 1e-6):
         # log_hyp are log of hyperparameters, note that it is [length_0, ..., length_d, sigma_f, sigma_probit]
         self._xdim = x_train.shape[1]
         self._nx = x_train.shape[0]
         self.x_train = x_train
         self.y_train = y_train
         self.uvi_train = uvi_train
+        self.delta_f = delta_f
 
         self.likelihood = likelihood()
 
         self.kern = GPy.kern.RBF(self._xdim, ARD=True)
 
 
-    def calc_laplace(self, loghyp, delta_f = 1e-6):
+    def calc_laplace(self, loghyp, f=None):
         self.kern.lengthscale = np.exp(loghyp[0:self._xdim])
-        self.kern.variance = np.exp(loghyp[self.x_dim])
+        self.kern.variance = (np.exp(loghyp[self._xdim]))**2
         self.likelihood.set_sigma = np.exp(loghyp[-1])
 
-        f = np.zeros((self._nx, 1))
+        if f is None:
+            f = np.zeros((self._nx, 1))
 
         # With current hyperparameters:
         Ix = np.eye(self._nx)
-        Kxx = self.kern.K(self.x_train)
-        L = np.linalg.cholesky(Kxx)
-        iKxx = np.linalg.solve(L.T, np.linalg.solve(L, Ix))
-        # detK = (np.product(L.diagonal()))**2
-        logdetK = np.sum(np.log(L.diagonal()))
+        K = self.kern.K(self.x_train)
+        eps = 1e-6
+        inv_ok = False
+
+        while not inv_ok:
+            try:
+                L = np.linalg.cholesky(K + eps*Ix)
+                iK = np.linalg.solve(L.T, np.linalg.solve(L, Ix))
+                # detK = (np.product(L.diagonal()))**2
+                logdetK = np.sum(np.log(L.diagonal()))
+                inv_ok = True
+            except np.linalg.linalg.LinAlgError:
+                eps = eps*10
+                print "Inversion issue, adding noise: {0}".format(eps)
 
         # First, solve for \hat{f} and W (mode finding Laplace approximation, Newton-Raphson)
-        f_error = delta_f + 1
+        f_error = self.delta_f + 1
 
-        while f_error > f:
+        while f_error > self.delta_f:
             W, dpy_df = self.likelihood.derivatives(self.uvi_train, self.y_train, f)
-            g = (iKxx + W)
+            g = (iK + W)
             f_new = np.matmul(np.linalg.inv(g), np.matmul(W, f) + dpy_df)
+            lml = self.likelihood.log_marginal(self.uvi_train, self.y_train, f_new, iK, logdetK)
+
+            ## Jensen version (iK + W)^-1 = K - K((I + WK)^-1)WK (not sure how to get f'K^-1f though...
+            # ig = K - np.matmul(np.matmul(np.matmul(K, np.linalg.inv(Ix + np.matmul(W, K))), W), K)
+            # f_new = np.matmul(ig, np.matmul(W, f) + dpy_df)
+            # lml = 0.0
+
             df = np.abs((f_new - f))
             f_error = np.max(df)
-            lml = self.likelihood.log_marginal(self.uvi_train, self.y_train, f_new, iKxx, logdetK)
+
             print f_error,lml
             f = f_new
 
         return f, lml
+
+    def calc_nlml(self, loghyp):
+        f,lml = self.calc_laplace(loghyp)
+        return -lml
