@@ -5,7 +5,7 @@ import GPpref
 import scipy.optimize as op
 
 log_hyp = np.log([0.1,1.0,0.1]) # length_scale, sigma_f, sigma_probit
-np.random.seed(2)
+np.random.seed(1)
 
 n_train = 20
 true_sigma = 0.05
