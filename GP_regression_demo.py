@@ -24,7 +24,7 @@ plt.figure()
 plt.plot(x_plot,y_plot,'k-')
 
 # Training data
-x_train = np.random.random(20)
+x_train = np.random.random(10)
 y_train = obs_function(x_train)
 plt.plot(x_train,y_train,'rx')
 

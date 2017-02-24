@@ -4,7 +4,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as ani
-from IPython.display import display
+#from IPython.display import display
 
 mean_value=3
 def explore_cost_function(a, b):
@@ -31,7 +31,7 @@ kernel = GPy.kern.RBF(input_dim=2, variance=10., lengthscale=20.)
 gpm = GPy.models.GPRegression(X, Y, kernel)
 gpm.optimize(messages=True)
 gpm.optimize_restarts(num_restarts = 10)
-display(gpm)
+#display(gpm)
 
     
 fig1,ax1 = plt.subplots(1,2,sharex=True, sharey=True)
@@ -64,7 +64,7 @@ for ii in range(40):
     video_frames.append(cframe)
     #for item in cframe:
      #   item.remove()
-plt.show()
+# plt.show()
 fig1.set_size_inches(10, 5)
 ax1[0].set_title('True field')
 ax1[1].set_title('GP estimate')
@@ -78,5 +78,5 @@ for axn in ax1:
     axn.autoscale(tight=True)
 
 vid = ani.ArtistAnimation(fig1, video_frames, interval=500, repeat_delay=0)
-#vid.save('../GP_vid2.mp4', writer = 'avconv', fps=2, bitrate=1500)
-plt.draw()
+vid.save('../GP_vid2.mp4', writer = 'avconv', fps=2, bitrate=1500)
+plt.show()
