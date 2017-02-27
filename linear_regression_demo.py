@@ -8,14 +8,14 @@ from scipy.stats import multivariate_normal
 
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
-cm = 'jet'
+cm = 'viridis'
 plt.rcParams['image.cmap'] = cm
 savefig = False
 
 n_training = 5
 noise = 0.1
 i_var = 1.0/(noise**2)
-np.random.seed(3)
+np.random.seed(2)
 n_posterior_samples = 5
 
 # Prior over weights
@@ -63,9 +63,12 @@ fx_plot = true_function(x_plot)
 patch_fx = Polygon(make_poly_array(x_plot,fx_plot,noise), ec=npc.lines[0], fc=npc.lighten(npc.lines[0], 3),alpha=0.5)
 
 # Training data
-x_train = np.random.random((n_training,1))*2.0-1.0
-X_train = np.hstack((x_train, np.ones(x_train.shape)))
+x_train = np.random.random((max(n_training, 100),1))*2.0-1.0
 y_train = obs_function(x_train, noise)
+
+x_train = x_train[0:n_training]
+X_train = np.hstack((x_train, np.ones(x_train.shape)))
+y_train = y_train[0:n_training]
 
 # Least squares fit
 if n_training > 1:
@@ -138,7 +141,11 @@ w_prior = multivariate_normal(w0, w_var)
 cmap = plt.get_cmap(cm)
 for wi in w_samples:
     pw = w_prior.pdf(wi)*likelihood(y_train, X_train, wi, noise)
-    h_a2[1,1].plot(x_plot, true_function(x_plot, *wi), '-', lw=1.0, color=cmap(pw/post_w.max())[0])
+    if pw <= 0:
+        col = 'r'
+    else:
+        col = cmap(pw[0]/post_w.max())
+    h_a2[1,1].plot(x_plot, true_function(x_plot, *wi), '-', lw=1.0, color=col)
 
 # Plot predictive distributions
 h_fhat, = h_a2[1,1].plot(x_plot, fhat, lw=1.5, ls='--', c=npc.lines[1])
@@ -149,5 +156,7 @@ h_a2[1,1].set_xlabel('$x$')
 h_a2[1,1].set_ylabel('$y$')
 h_a2[1,1].set_title('Predictions $\hat{f}$')
 
+if savefig:
+    h_f2.savefig('fig/bayesion_linear_regression.pdf', bbox_inches='tight', transparent='true')
 plt.tight_layout()
 plt.show()

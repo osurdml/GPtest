@@ -8,19 +8,20 @@ plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
 
-np.random.seed(0)
+np.random.seed(1)
 noise = 0.2
-n_training = 15
+n_training = 8
+opt_hyper = False
 
-gp_l = 0.5
+gp_l = 0.02
 gp_var = 1.0**2
-gp_noisevar = 0.5**2
+gp_noisevar = 0.1**2
 
 # Define polynomial function to be modelled
 def true_function(x):
-    c = np.array([3,5,-9,-3,2],float)
-    y = np.polyval(c,x)
-    #y = np.sin(x*np.pi)
+    #c = np.array([3,5,-9,-3,2],float)
+    #y = np.polyval(c,x)
+    y = np.sin(x*np.pi*1.5)
     return y
 
 # Define noisy observation function
@@ -30,27 +31,33 @@ def obs_function(x, sigma):
     
 def make_poly_array(x,y,sigma):
     nx = len(x)
+    sig = np.array(sigma)
     xy = np.zeros((2*nx, 2))
     xy[:,0] = np.append(x, x[::-1])
-    xy[:,1] = np.append(y-sigma, y[::-1]+sigma)
+    if sig.size > 1:
+        rsig = sig[::-1]
+    else:
+        rsig = sig
+    xy[:,1] = np.append(y-sig, y[::-1]+rsig)
     return xy
 
     
 # Main program
 # Plot true function
 nxp = 100
-x_plot = np.atleast_2d(np.linspace(-1.0,2.0,nxp,dtype='float')).T
+x_plot = np.atleast_2d(np.linspace(-2.0,2.0,nxp,dtype='float')).T
 fx_plot = true_function(x_plot)
 
 # Training data
-x_train = np.random.random((n_training,1))
+x_train = np.random.random((n_training,1))*1.5-0.75
 y_train = obs_function(x_train, noise)
 
 # GP 
 kernel = GPy.kern.RBF(input_dim=1, variance=gp_var, lengthscale=gp_l)
 gp = GPy.models.GPRegression(x_train,y_train,kernel)
 gp.Gaussian_noise.variance = gp_noisevar
-gp.optimize()
+if opt_hyper:
+    gp.optimize()
 
 # Predict
 fhat_test,var_test = gp.predict(x_plot)
@@ -72,5 +79,5 @@ gp_str = '$\hat{{f}}(x) \sim \mathcal{{GP}}(l={0:0.2f}, \sigma_f={1:0.2f}, \sigm
 gp_str = gp_str.format(kernel.lengthscale.values[0], np.sqrt(kernel.variance.values[0]), np.sqrt(gp.Gaussian_noise.variance.values[0]))
 h_ax.legend((h_fx, h_y, h_fhat),('$f(x)$', '$y \sim \mathcal{N}(f(x), \sigma^2)$', gp_str), loc='best')
 h_ax.set_xlabel('$x$')
-h_fig.savefig('fig/regression_example.pdf', bbox_inches='tight', transparent='true')
+#h_fig.savefig('fig/regression_example.pdf', bbox_inches='tight', transparent='true')
 plt.show()
