@@ -128,7 +128,7 @@ class AbsBoundProbit(object):
 
     def likelihood(self, y, f ):
         ml = self.mean_link(f)
-        return beta.pdf(y, self.v*ml, self.v*(1-ml))
+        return np.log(beta.pdf(y, self.v*ml, self.v*(1-ml)))
 
     def derivatives(self, y, f):
 
@@ -143,12 +143,13 @@ class AbsBoundProbit(object):
         # Estimate dpy_df
         delta = 0.001
         print "Estimated dpy_df"
-        est_dpy_df = (self.likelihood(y, f+delta) - self.likelihood(y, f-delta))/2*delta
+        est_dpy_df = (self.likelihood(y, f+delta) - self.likelihood(y, f-delta))/(2*delta)
         print est_dpy_df
 
         print "Estimated W"
-        est_W = np.diagflat((self.likelihood(y, f+2*delta) - 2*self.likelihood(y,f) + self.likelihood(y, f-2*delta))/(2*delta)**2)
-        print est_W
+        est_W_diag = (self.likelihood(y, f+2*delta) - 2*self.likelihood(y,f) + self.likelihood(y, f-2*delta))/(2*delta)**2
+
+        print est_W_diag
 
         # Theres a dot in Jensen that I'm hoping is just a typo. I didn't fully derive it, but it looks correct.   
         # As the iteration goes, f blows up.  This makes parts of alpha, beta go to v and 0.  Digamma(0)=-inf :(
@@ -156,8 +157,10 @@ class AbsBoundProbit(object):
         dpy_df = self.v*std_norm_pdf(f*self._isqrt2sig) * (np.log(y)-np.log(1-y) - digamma(alpha) + digamma(beta) )
 
         Wdiag = ( - self.v**2*std_norm_pdf(f*self._isqrt2sig) * 
-                    ( std_norm_pdf(f*self._isqrt2sig) * ( polygamma(0, alpha) + polygamma(0, alpha) ) + 
-                    f*self._i2var/self.v * (np.log(y)-np.log(1-y)-digamma(alpha) + digamma(beta)) ))
+                    ( std_norm_pdf(f*self._isqrt2sig) * ( polygamma(1, alpha) + polygamma(1, alpha) ) + 
+                    f*self._isqrt2sig/self.v * (np.log(y)-np.log(1-y)-digamma(alpha) + digamma(beta)) ))
+        print "Wdiag"
+        print Wdiag
 
         W = np.diagflat(Wdiag)
 
@@ -238,7 +241,8 @@ class PreferenceGaussianProcess(object):
         self.abs_likelihood.set_v = np.exp(loghyp[-1])
 
         if f is None:
-            f = np.zeros((self._nx, 1))
+            f = np.ones((self._nx, 1))
+            f = f*.5
 
         # With current hyperparameters:
         Ix = np.eye(self._nx)
