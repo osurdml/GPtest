@@ -3,7 +3,7 @@ import numpy as np
 import GPy
 #from scipy.special import ndtr as std_norm_cdf, digamma, polygamma
 from scipy.special import digamma, polygamma
-from scipy.stats import norm
+from scipy.stats import norm, beta
 from scipy.linalg import block_diag
 
 #define a standard normal pdf
@@ -126,6 +126,10 @@ class AbsBoundProbit(object):
     def beta(self, f):
         return self.v * (1-self.mean_link(f))
 
+    def likelihood(self, y, f ):
+        ml = self.mean_link(f)
+        return beta.pdf(y, self.v*ml, self.v*(1-ml))
+
     def derivatives(self, y, f):
 
         print "Start Iter.  f, y"
@@ -135,6 +139,16 @@ class AbsBoundProbit(object):
         beta = self.beta(f) #let's make a distribution called beta that also has beta as a parameter!
         # print "Alpha: " + str(alpha)
         # print "Beta: " + str(beta) 
+
+        # Estimate dpy_df
+        delta = 0.001
+        print "Estimated dpy_df"
+        est_dpy_df = (self.likelihood(y, f+delta) - self.likelihood(y, f-delta))/2*delta
+        print est_dpy_df
+
+        print "Estimated W"
+        est_W = np.diagflat((self.likelihood(y, f+2*delta) - 2*self.likelihood(y,f) + self.likelihood(y, f-2*delta))/(2*delta)**2)
+        print est_W
 
         # Theres a dot in Jensen that I'm hoping is just a typo. I didn't fully derive it, but it looks correct.   
         # As the iteration goes, f blows up.  This makes parts of alpha, beta go to v and 0.  Digamma(0)=-inf :(
@@ -221,7 +235,7 @@ class PreferenceGaussianProcess(object):
         self.kern.variance = (np.exp(loghyp[self._xdim]))**2
         self.rel_likelihood.set_sigma = np.exp(loghyp[-2]) # Do we need different sigmas for each likelihood?  Hopefully No?
         self.abs_likelihood.set_sigma = np.exp(loghyp[-2])
-        #self.abs_likelihood.set_v = np.exp(loghyp[-1])
+        self.abs_likelihood.set_v = np.exp(loghyp[-1])
 
         if f is None:
             f = np.zeros((self._nx, 1))
