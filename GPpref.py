@@ -118,7 +118,8 @@ class AbsBoundProbit(object):
         self.v = v
 
     def mean_link(self, f):
-        return std_norm_cdf(f*self._isqrt2sig)
+        ml = np.clip(std_norm_cdf(f*self._isqrt2sig), 1e-12, 1.0-1e-12)
+        return ml
 
     def alpha(self, f):
         return self.v * self.mean_link(f)
@@ -142,29 +143,31 @@ class AbsBoundProbit(object):
 
         # Estimate dpy_df
         delta = 0.001
-        print "Estimated dpy_df"
+        #print "Estimated dpy_df"
         est_dpy_df = (self.likelihood(y, f+delta) - self.likelihood(y, f-delta))/(2*delta)
-        print est_dpy_df
+        #print est_dpy_df
+        print 'log likelihood'
+        print np.sum(self.likelihood(y, f))
 
-        print "Estimated W"
+        #print "Estimated W"
         est_W_diag = (self.likelihood(y, f+2*delta) - 2*self.likelihood(y,f) + self.likelihood(y, f-2*delta))/(2*delta)**2
 
-        print est_W_diag
+        #print est_W_diag
 
         # Theres a dot in Jensen that I'm hoping is just a typo. I didn't fully derive it, but it looks correct.   
         # As the iteration goes, f blows up.  This makes parts of alpha, beta go to v and 0.  Digamma(0)=-inf :(
         # So why is it blowing up?
-        dpy_df = self.v*std_norm_pdf(f*self._isqrt2sig) * (np.log(y)-np.log(1-y) - digamma(alpha) + digamma(beta) )
+        dpy_df = self.v*self._isqrt2sig*std_norm_pdf(f*self._isqrt2sig) * (np.log(y)-np.log(1-y) - digamma(alpha) + digamma(beta) )
 
-        Wdiag = ( - self.v**2*std_norm_pdf(f*self._isqrt2sig) * 
-                    ( std_norm_pdf(f*self._isqrt2sig) * ( polygamma(1, alpha) + polygamma(1, alpha) ) + 
-                    f*self._isqrt2sig/self.v * (np.log(y)-np.log(1-y)-digamma(alpha) + digamma(beta)) ))
-        print "Wdiag"
-        print Wdiag
+        Wdiag =  - self.v*self._isqrt2sig*std_norm_pdf(f*self._isqrt2sig) * (
+                    f*self._i2var*( np.log(y)-np.log(1.0-y)-digamma(alpha) + digamma(beta) ) +
+                    self.v*self._isqrt2sig*std_norm_pdf(f*self._isqrt2sig) * (polygamma(1, alpha) + polygamma(1, beta)) )
+        # print "Wdiag"
+        # print Wdiag
 
         W = np.diagflat(Wdiag)
 
-        return W, dpy_df
+        return -W, dpy_df
 
     def log_marginal(self):
         pass
@@ -242,7 +245,7 @@ class PreferenceGaussianProcess(object):
 
         if f is None:
             f = np.ones((self._nx, 1))
-            f = f*.5
+            f = f*.0
 
         # With current hyperparameters:
         Ix = np.eye(self._nx)
@@ -287,13 +290,14 @@ class PreferenceGaussianProcess(object):
             elif self._n_abs>0:
                 W, dpy_df = self.abs_likelihood.derivatives(self.y_abs_train, f_abs)
 
-            # print "Total"
-            print "Dpy, W:"
-            print dpy_df
-            print W
+            # # print "Total"
+            # print "Dpy, W:"
+            # print dpy_df
+            # print W
+            lambda_eye = 0.0*np.eye(iK.shape[0])
 
-            g = (iK + W)
-            f_new = np.matmul(np.linalg.inv(g), np.matmul(W, f) + dpy_df)
+            g = (iK + W - lambda_eye)
+            f_new = np.matmul(np.linalg.inv(g), np.matmul(W-lambda_eye, f) + dpy_df)
             #lml = self.rel_likelihood.log_marginal(self.uvi_train, self.y_train, f_new, iK, logdetK)
 
             ## Jensen version (iK + W)^-1 = K - K((I + WK)^-1)WK (not sure how to get f'K^-1f though...
@@ -304,7 +308,7 @@ class PreferenceGaussianProcess(object):
             df = np.abs((f_new - f))
             f_error = np.max(df)
 
-            print "F Error: " + str(f_error) #,lml
+            # print "F Error: " + str(f_error) #,lml
             # print "F New: " + str(f_new)
             f = f_new
 

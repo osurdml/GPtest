@@ -7,7 +7,7 @@ import scipy.optimize as op
 log_hyp = np.log([0.1,1.0,0.1,10.0]) # length_scale, sigma_f, sigma_probit, v_beta
 np.random.seed(3)
 
-n_rel_train = 0
+n_rel_train = 10
 n_abs_train = 5
 true_sigma = 0.05
 delta_f = 1e-5
@@ -89,8 +89,13 @@ theta0 = log_hyp
 #f,lml = prefGP.calc_laplace(log_hyp)
 f = prefGP.calc_laplace(log_hyp)
 
+# New y's are expectations from Beta distribution. E(X) = alpha/(alpha+beta)
+alph = prefGP.abs_likelihood.alpha(f)
+bet = prefGP.abs_likelihood.beta(f)
+Ey = alph/(alph+bet)
+
 if x_train.shape[0]>0:
-    ha.plot(x_train, f[0:x_train.shape[0]], 'g^')
+    ha.plot(x_train, Ey[0:x_train.shape[0]], 'g^')
 if x_abs_train.shape[0]>0:
-    ha.plot(x_abs_train, f[x_train.shape[0]:], 'r^')
+    ha.plot(x_abs_train, Ey[x_train.shape[0]:], 'r^')
 plt.show()
