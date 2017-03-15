@@ -127,9 +127,18 @@ class AbsBoundProbit(object):
     def beta(self, f):
         return self.v * (1-self.mean_link(f))
 
-    def likelihood(self, y, f ):
+    def get_alpha_beta(self, f):
         ml = self.mean_link(f)
-        return np.log(beta.pdf(y, self.v*ml, self.v*(1-ml)))
+        aa = self.v * ml
+        bb = self.v * (1-ml)
+        return aa, bb
+
+    def likelihood(self, y, f):
+        aa, bb = self.get_alpha_beta(f)
+        return beta.pdf(y, aa, bb)
+
+    def log_likelihood(self, y, f):
+        return np.log(self.likelihood(y,f))
 
     def derivatives(self, y, f):
 
@@ -144,13 +153,13 @@ class AbsBoundProbit(object):
         # Estimate dpy_df
         delta = 0.001
         #print "Estimated dpy_df"
-        est_dpy_df = (self.likelihood(y, f+delta) - self.likelihood(y, f-delta))/(2*delta)
+        #est_dpy_df = (self.log_likelihood(y, f+delta) - self.log_likelihood(y, f-delta))/(2*delta)
         #print est_dpy_df
         print 'log likelihood'
-        print np.sum(self.likelihood(y, f))
+        print np.sum(self.log_likelihood(y, f))
 
         #print "Estimated W"
-        est_W_diag = (self.likelihood(y, f+2*delta) - 2*self.likelihood(y,f) + self.likelihood(y, f-2*delta))/(2*delta)**2
+        #est_W_diag = (self.log_likelihood(y, f+2*delta) - 2*self.log_likelihood(y,f) + self.log_likelihood(y, f-2*delta))/(2*delta)**2
 
         #print est_W_diag
 
@@ -172,6 +181,10 @@ class AbsBoundProbit(object):
     def log_marginal(self):
         pass
 
+    def expectation(self, fhat, var_star):
+        #mu_t = self.mean_link(fhat)
+        E_x = np.clip(std_norm_cdf(fhat/(np.sqrt(2*self.sigma**2 + var_star))), 1e-12, 1.0-1e-12)
+        return E_x
 
 class AbsProbit(object):
     # The Probit Likelihood given in Rasmussen, p43.  Note f(x) is scaled by sqrt(2)*sigma, as in Jensen.  
@@ -235,6 +248,8 @@ class PreferenceGaussianProcess(object):
 
         self.kern = GPy.kern.RBF(self._xdim, ARD=True)
 
+        self.Ix = np.eye(self._nx)
+
 
     def calc_laplace(self, loghyp, f=None):
         self.kern.lengthscale = np.exp(loghyp[0:self._xdim])
@@ -248,21 +263,9 @@ class PreferenceGaussianProcess(object):
             f = f*.0
 
         # With current hyperparameters:
-        Ix = np.eye(self._nx)
-        K = self.kern.K(self.x_train_all)
-        eps = 1e-6
-        inv_ok = False
+        self.Kxx = self.kern.K(self.x_train_all)
 
-        while not inv_ok:
-            try:
-                L = np.linalg.cholesky(K + eps*Ix)
-                iK = np.linalg.solve(L.T, np.linalg.solve(L, Ix))
-                # detK = (np.product(L.diagonal()))**2
-                logdetK = np.sum(np.log(L.diagonal()))
-                inv_ok = True
-            except np.linalg.linalg.LinAlgError:
-                eps = eps*10
-                print "Inversion issue, adding noise: {0}".format(eps)
+        self.iK, logdetK = self._safe_invert_noise(self.Kxx)
 
         # First, solve for \hat{f} and W (mode finding Laplace approximation, Newton-Raphson)
         f_error = self.delta_f + 1
@@ -294,9 +297,9 @@ class PreferenceGaussianProcess(object):
             # print "Dpy, W:"
             # print dpy_df
             # print W
-            lambda_eye = 0.0*np.eye(iK.shape[0])
+            lambda_eye = 0.0*np.eye(self.iK.shape[0])
 
-            g = (iK + W - lambda_eye)
+            g = (self.iK + W - lambda_eye)
             f_new = np.matmul(np.linalg.inv(g), np.matmul(W-lambda_eye, f) + dpy_df)
             #lml = self.rel_likelihood.log_marginal(self.uvi_train, self.y_train, f_new, iK, logdetK)
 
@@ -312,8 +315,50 @@ class PreferenceGaussianProcess(object):
             # print "F New: " + str(f_new)
             f = f_new
 
+        self.W = W
+        self.f = f
+        self.iKf = np.matmul(self.iK, self.f)
+
         return f#, lml
+
+    def _safe_invert_noise(self, mat):
+        eps = 1e-6
+        inv_ok = False
+
+        while not inv_ok:
+            try:
+                L = np.linalg.cholesky(mat + eps*self.Ix)
+                imat = np.linalg.solve(L.T, np.linalg.solve(L, self.Ix))
+                # detK = (np.product(L.diagonal()))**2
+                logdet = np.sum(np.log(L.diagonal()))
+                inv_ok = True
+            except np.linalg.linalg.LinAlgError:
+                eps = eps*10
+                print "Inversion issue, adding noise: {0}".format(eps)
+        return imat, logdet
 
     def calc_nlml(self, loghyp):
         f,lml = self.calc_laplace(loghyp)
         return -lml
+
+    def predict_latent(self, x):
+        assert hasattr(self, 'iKf')
+        kt = self.kern.K(self.x_train_all, x)
+        mean_latent = np.matmul(kt.T, self.iKf)
+        Ktt = self.kern.K(x)
+        iKW = np.linalg.inv(np.matmul(self.W, self.Kxx) + self.Ix)
+        var_latent = Ktt - np.matmul(kt.T, np.matmul(iKW, np.matmul(self.W, kt)))
+        return mean_latent, var_latent
+
+    def expected_y(self, x, fhat=None, varhat=None):
+        if fhat is None or varhat is None:
+            fhat, varhat = self.predict_latent(x)
+        #Ktt = self.kern.K(x)
+        #var_star = 2*self.abs_likelihood.sigma**2 + np.atleast_2d(Ktt.diagonal()).T
+        E_y = self.abs_likelihood.expectation(fhat, np.atleast_2d(varhat.diagonal()).T)
+        return E_y
+
+
+
+
+
