@@ -222,7 +222,7 @@ class AbsProbit(object):
 
 class PreferenceGaussianProcess(object):
 
-    def __init__(self, x_train, uvi_train, x_abs_train, y_train, y_abs_train, likelihood=PrefProbit, delta_f = 1e-6):
+    def __init__(self, x_train, uvi_train, x_abs_train, y_train, y_abs_train, likelihood=PrefProbit(), delta_f = 1e-6, abs_likelihood=AbsBoundProbit()):
         # log_hyp are log of hyperparameters, note that it is [length_0, ..., length_d, sigma_f, sigma_probit, v_beta]
         # Training points are split into relative and absolute for calculating f, but combined for predictions.  
         if x_train.shape[0] is not 0:
@@ -243,8 +243,8 @@ class PreferenceGaussianProcess(object):
 
         self.x_train_all = np.concatenate((self.x_train, self.x_abs_train), 0)
 
-        self.rel_likelihood = likelihood()
-        self.abs_likelihood = AbsBoundProbit()
+        self.rel_likelihood = likelihood
+        self.abs_likelihood = abs_likelihood
 
         self.kern = GPy.kern.RBF(self._xdim, ARD=True)
 
