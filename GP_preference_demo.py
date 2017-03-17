@@ -100,7 +100,7 @@ print x_abs_train
 print y_abs_train
 # print uvi_train
 
-prefGP = GPpref.PreferenceGaussianProcess(x_train, uvi_train, x_abs_train,  y_train, y_abs_train, delta_f=delta_f,abs_likelihood=GPpref.AbsBoundProbit(sigma=0.5, v=10.0))
+prefGP = GPpref.PreferenceGaussianProcess(x_train, uvi_train, x_abs_train,  y_train, y_abs_train, delta_f=delta_f,abs_likelihood=GPpref.AbsBoundProbit(sigma=0.5, v=20.0))
 
 # Pseudocode:
 # FOr a set of hyperparameters, return log likelihood that can be used by an optimiser
