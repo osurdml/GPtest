@@ -106,7 +106,7 @@ prefGP = GPpref.PreferenceGaussianProcess(x_train, uvi_train, x_abs_train,  y_tr
 # FOr a set of hyperparameters, return log likelihood that can be used by an optimiser
 theta0 = log_hyp
 
-# log_hyp = op.fmin(prefGP.calc_nlml,theta0)
+log_hyp = op.fmin(prefGP.calc_nlml,theta0)
 #f,lml = prefGP.calc_laplace(log_hyp)
 f = prefGP.calc_laplace(log_hyp)
 
@@ -127,8 +127,9 @@ normal_samples = np.random.normal(size=n_mcsamples)
 for i,(fstar,vstar) in enumerate(zip(fhat, vhat)):
     f_samples = normal_samples*vstar+fstar
     aa, bb = prefGP.abs_likelihood.get_alpha_beta(f_samples)
-    p_y[:,i] = [iny*np.sum(beta.pdf(yj, aa, bb)) for yj in y_samples]
-    E_y2[i] = np.sum(np.dot(y_samples, p_y[:,i]))/np.sum(p_y[:,i])
+    p_y[:, i] = [iny*np.sum(beta.pdf(yj, aa, bb)) for yj in y_samples]
+    p_y[:, i] /= np.sum(p_y[:, i])
+    E_y2[i] = np.sum(np.dot(y_samples, p_y[:, i]))
 
 # New y's are expectations from Beta distribution. E(X) = alpha/(alpha+beta)
 #alph = prefGP.abs_likelihood.alpha(f)

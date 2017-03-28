@@ -6,47 +6,67 @@ import scipy.optimize as op
 import plot_tools as ptt
 import mcmc
 from scipy.stats import beta
-
-plt.rc('font', **{'family': 'serif', 'sans-serif': ['Computer Modern Roman']})
+import active_learners
+plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
-log_hyp = np.log([0.1, 0.5, 0.1, 10.0])  # length_scale, sigma_f, sigma_probit, v_beta
+log_hyp = np.log([0.1,0.5,0.1,10.0]) # length_scale, sigma_f, sigma_probit, v_beta
 np.random.seed(3)
 
-n_rel_train = 0
-n_abs_train = 0
+n_rel_train = 2
+n_abs_train = 1
 true_sigma = 0.05
 delta_f = 1e-5
+
+beta_sigma = 0.5
+beta_v=20.0
 
 n_xplot = 101
 n_mcsamples = 1000
 n_ysamples = 101
 
+n_queries = 20
 
-# Define polynomial function to be modelled
+# Define function to be modelled
 def true_function(x):
-    y = (np.sin(x * 2 * np.pi + np.pi / 4) + 1.25) / 2.5
-    # y = np.sin(x*2.0*np.pi + np.pi/4.0)
+    #y = (np.sin(x*2*np.pi + np.pi/4) + 1.25)/2.5
+    #y = np.sin(x*2.0*np.pi + np.pi/4.0)
+    y = 0.3*np.cos(6*np.pi*(x-0.5))*np.exp(-10*(x-0.5)**2) + 0.5
     return y
 
+class ObservationFunction(object):
+    def __init__(self, true_fun):
+        self.f = true_fun
 
-# Define noisy observation function
-def obs_function(x, sigma):
+    def generate_observations(self, x):
+        fx = self.f(x)
+
+# Gaussian noise observation function
+def normal_obs_function(x):
     fx = true_function(x)
-    noise = np.random.normal(scale=sigma, size=x.shape)
+    noise = np.random.normal(scale=true_sigma, size=x.shape)
     return fx + noise
 
+beta_obs = GPpref.AbsBoundProbit(sigma=beta_sigma, v=beta_v)
 
-def noisy_preference_rank(uv, sigma):
-    fuv = obs_function(uv, sigma)
-    y = -1 * np.ones((fuv.shape[0], 1), dtype='int')
-    y[fuv[:, 1] > fuv[:, 0]] = 1
+def beta_obs_function(x):
+    fx = true_function(x)
+    a, b = beta_obs.get_alpha_beta(fx)
+    z = [beta.rvs(aa, bb) for aa,bb in zip(a,b)]
+    return z
+
+# Set target observation function
+obs_function = normal_obs_function
+
+def noisy_preference_rank(uv):
+    fuv = obs_function(uv)
+    y = -1*np.ones((fuv.shape[0],1),dtype='int')
+    y[fuv[:,1] > fuv[:,0]] = 1
     return y, fuv
-
 
 # Main program
 # True function
-x_plot = np.linspace(0.0, 1.0, n_xplot, dtype='float')
+x_plot = np.linspace(0.0,1.0,n_xplot,dtype='float')
 y_plot = true_function(x_plot)
 x_test = np.atleast_2d(x_plot).T
 
@@ -54,84 +74,73 @@ x_test = np.atleast_2d(x_plot).T
 # are actually indexes into x, because it is easier computationally. You can
 # recover the actual u,v values using x[ui],x[vi]
 if n_rel_train > 0:
-    x_train = np.random.random((2 * n_rel_train, 1))
-    uvi_train = np.random.choice(range(2 * n_rel_train), (n_rel_train, 2), replace=False)
-    uv_train = x_train[uvi_train][:, :, 0]
+    x_train = np.random.random((2*n_rel_train,1))
+    uvi_train = np.random.choice(range(2*n_rel_train), (n_rel_train,2), replace=False)
+    uv_train = x_train[uvi_train][:,:,0]
 
     # Get noisy observations f(uv) and corresponding ranks y_train
-    y_train, fuv_train = noisy_preference_rank(uv_train, true_sigma)
+    y_train, fuv_train = noisy_preference_rank(uv_train)
 
 else:
-    x_train = np.zeros((0, 1))
-    uvi_train = np.zeros((0, 2))
-    uv_train = np.zeros((0, 2))
-    y_train = np.zeros((0, 1))
-    fuv_train = np.zeros((0, 2))
+    x_train = np.zeros((0,1))
+    uvi_train = np.zeros((0,2))
+    uv_train = np.zeros((0,2))
+    y_train = np.zeros((0,1))
+    fuv_train = np.zeros((0,2))
 
-x_abs_train = np.random.random((n_abs_train, 1))
-# y_abs_train = obs_function(x_abs_train, true_sigma)
-y_abs_train = np.clip(obs_function(x_abs_train, true_sigma), 0.01, .99)
+x_abs_train = np.random.random((n_abs_train,1))
+#y_abs_train = obs_function(x_abs_train, true_sigma)
+y_abs_train = np.clip(obs_function(x_abs_train), 0.01, .99)
 
-# GP hyperparameters
-# note: using log scaling to aid learning hyperparameters with varied magnitudes
 
-print "Data"
-# print x_train
-print x_abs_train
-# print y_train
-print y_abs_train
-# print uvi_train
+learner = active_learners.PeakComparitor(x_train, uvi_train, x_abs_train,  y_train, y_abs_train, delta_f=delta_f,
+                                          abs_likelihood=GPpref.AbsBoundProbit(sigma=beta_sigma, v=beta_v))
 
-prefGP = GPpref.PreferenceGaussianProcess(x_train, uvi_train, x_abs_train, y_train, y_abs_train, delta_f=delta_f)
-
-# Pseudocode:
-# FOr a set of hyperparameters, return log likelihood that can be used by an optimiser
 theta0 = log_hyp
 
-# log_hyp = op.fmin(prefGP.calc_nlml,theta0)
-# f,lml = prefGP.calc_laplace(log_hyp)
-f = prefGP.calc_laplace(log_hyp)
+# Get initial solution
+learner.set_hyperparameters(log_hyp)
+f = learner.calc_laplace()
+
+for obs_num in range(n_queries):
+    fuv = np.array([[0, 1]])
+    next_x = np.atleast_2d(learner.select_observation())
+    if next_x.shape[0] == 1:
+        next_y = obs_function(next_x)
+        learner.add_observations(next_x, next_y)
+    else:
+        next_y, next_f = noisy_preference_rank(next_x.T)
+        fuv_train = np.concatenate((fuv_train, next_f), 0)
+        learner.add_observations(next_x, next_y, fuv)
+    print next_x, next_y
+    f = learner.calc_laplace()
 
 # Latent predictions
-fhat, vhat = prefGP.predict_latent(x_test)
-vhat = np.atleast_2d(vhat.diagonal()).T
+fhat, vhat = learner.predict_latent(x_test)
 
 # Expected values
-E_y = prefGP.expected_y(x_test, fhat, vhat)
+E_y = learner.expected_y(x_test, fhat, vhat)
 
 # Sampling from posterior to show likelihoods
-p_y = np.zeros((n_ysamples, n_xplot))
-y_samples = np.linspace(0.0, 1.0, n_ysamples)
-iny = 1.0 / n_ysamples
-E_y2 = np.zeros(n_xplot)
+mc_samples = np.random.normal(size=n_mcsamples)
+y_samples = np.linspace(0.01, 0.99, n_ysamples)
+p_y = learner.posterior_likelihood(fhat, vhat, y_samples, mc_samples)
 
-normal_samples = np.random.normal(size=n_mcsamples)
-for i, (fstar, vstar) in enumerate(zip(fhat, vhat)):
-    f_samples = normal_samples * vstar + fstar
-    aa, bb = prefGP.abs_likelihood.get_alpha_beta(f_samples)
-    p_y[:, i] = [iny * np.sum(beta.pdf(yj, aa, bb)) for yj in y_samples]
-    E_y2[i] = np.sum(np.dot(y_samples, p_y[:, i])) / np.sum(p_y[:, i])
-
-# New y's are expectations from Beta distribution. E(X) = alpha/(alpha+beta)
-# alph = prefGP.abs_likelihood.alpha(f)
-# bet = prefGP.abs_likelihood.beta(f)
-# Ey = alph/(alph+bet)
-
-hf, (ha, hb) = plt.subplots(1, 2)
+hf, (ha, hb) = plt.subplots(1,2)
 hf, hpf = ptt.plot_with_bounds(ha, x_plot, y_plot, true_sigma, c=ptt.lines[0])
+ha.imshow(p_y, origin='lower', extent=[x_plot[0], x_plot[-1], 0.01, 0.99])
 
-if x_train.shape[0] > 0:
-    for uv, fuv, y in zip(uv_train, fuv_train, y_train):
+if learner.GP.x_train.shape[0]>0:
+    for uv,fuv,y in zip(learner.GP.x_train[learner.GP.uvi_train][:,:,0], fuv_train, learner.GP.y_train):
         ha.plot(uv, fuv, 'b-', color=ptt.lighten(ptt.lines[0]))
-        ha.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], '+', color=ptt.darken(ptt.lines[0], 1.5))
+        ha.plot(uv[(y+1)/2],fuv[(y+1)/2],'+', color=ptt.darken(ptt.lines[0], 1.5))
 
-if x_abs_train.shape[0] > 0:
-    ha.plot(x_abs_train, y_abs_train, '+', color=ptt.lighten(ptt.lines[2]))
+if learner.GP.x_abs_train.shape[0]>0:
+    ha.plot(learner.GP.x_abs_train, learner.GP.y_abs_train, 'k+')
 
 hfhat, hpfhat = ptt.plot_with_bounds(hb, x_test, fhat, np.sqrt(vhat), c=ptt.lines[1])
 hEy, = ha.plot(x_plot, E_y, color=ptt.lines[3])
 
-ha.imshow(p_y, origin='lower', extent=[x_plot[0], x_plot[-1], 0.0, 1.0])
 # ha.plot(x_plot, E_y2, color=ptt.lines[4])
 hmap, = ha.plot(x_plot, y_samples[np.argmax(p_y, axis=0)], color='w')
 ha.set_title('Training data')
@@ -139,7 +148,8 @@ ha.set_ylabel('$y$')
 ha.set_xlabel('$x$')
 hb.set_xlabel('$x$')
 hb.set_ylabel('$f(x)$')
-ha.legend([hf, hEy, hmap], [r'$f(x)$', r'$\mathbb{E}_{p(y|\mathcal{Y})}\left[y\right]$', r'$y_{MAP} | \mathcal{Y}$'])
+
+ha.legend([hf, hEy, hmap], [r'$f(x)$', r'$E_{p(y|\mathcal{Y})}\left[y\right]$', r'$y_{MAP} | \mathcal{Y}$'])
 hb.legend([hfhat], [r'Latent function $\hat{f}(x)$'])
 
 plt.show()

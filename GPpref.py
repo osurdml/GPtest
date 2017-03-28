@@ -61,7 +61,7 @@ class PrefProbit(object):
         self._isqrt2sig = 1.0 / (self.sigma * np.sqrt(2.0))
         self._i2var =  self._isqrt2sig**2
 
-    def z_k(self, uvi, f, y):
+    def z_k(self, uvi, y, f):
         zc = self._isqrt2sig * (f[uvi[:, 1]] - f[uvi[:, 0]])
         return y * zc
 
@@ -75,7 +75,7 @@ class PrefProbit(object):
 
     def derivatives(self, uvi, y, f):
         nx = len(f)
-        z = self.z_k(uvi, f, y)
+        z = self.z_k(uvi, y=y, f=f)
         phi_z = std_norm_cdf(z)
         N_z = std_norm_pdf(z)
 
@@ -96,11 +96,18 @@ class PrefProbit(object):
 
         return W, dpy_df
 
-    def log_marginal(self, uvi, y, f, iK, logdetK):
-        z = self.z_k(uvi, f, y)
+    def likelihood(self, uvi, y, f):
+        z = self.z_k(uvi, y=y, f=f)
         phi_z = std_norm_cdf(z)
-        psi = np.sum(np.log(phi_z)) - 0.5 * np.matmul(np.matmul(f.T, iK), f) - 0.5*logdetK - iK.shape[0]/2.0*self.log2pi
-        return psi.flat[0]
+        return phi_z
+
+    def log_likelihood(self, uvi, y, f):
+        return np.log(self.likelihood(uvi, y, f))
+
+    def prediction(self, fhat, varhat, uvi):
+        var_star = 2*self.sigma**2 + np.atleast_2d([varhat[u, u] + varhat[v, v] - varhat[u, v] - varhat[v, v] for u,v in uvi]).T
+        p_y = std_norm_cdf( (fhat[uvi[:,0]] - fhat[uvi[:,1]])/np.sqrt(var_star) )
+        return p_y
 
 class AbsBoundProbit(object):
     def __init__(self, sigma=1.0, v=10.0):
@@ -142,9 +149,9 @@ class AbsBoundProbit(object):
 
     def derivatives(self, y, f):
 
-        print "Start Iter.  f, y"
-        print f
-        print y
+        #print "Start Iter.  f, y"
+        #print f
+        #print y
         alpha = self.alpha(f)
         beta = self.beta(f) #let's make a distribution called beta that also has beta as a parameter!
         # print "Alpha: " + str(alpha)
@@ -155,8 +162,8 @@ class AbsBoundProbit(object):
         #print "Estimated dpy_df"
         #est_dpy_df = (self.log_likelihood(y, f+delta) - self.log_likelihood(y, f-delta))/(2*delta)
         #print est_dpy_df
-        print 'log likelihood'
-        print np.sum(self.log_likelihood(y, f))
+        #print 'log likelihood'
+        #print np.sum(self.log_likelihood(y, f))
 
         #print "Estimated W"
         #est_W_diag = (self.log_likelihood(y, f+2*delta) - 2*self.log_likelihood(y,f) + self.log_likelihood(y, f-2*delta))/(2*delta)**2
@@ -181,7 +188,7 @@ class AbsBoundProbit(object):
     def log_marginal(self):
         pass
 
-    def expectation(self, fhat, var_star):
+    def prediction(self, fhat, var_star):
         #mu_t = self.mean_link(fhat)
         E_x = np.clip(std_norm_cdf(fhat/(np.sqrt(2*self.sigma**2 + var_star))), 1e-12, 1.0-1e-12)
         return E_x
@@ -225,13 +232,23 @@ class PreferenceGaussianProcess(object):
     def __init__(self, x_train, uvi_train, x_abs_train, y_train, y_abs_train, likelihood=PrefProbit(), delta_f = 1e-6, abs_likelihood=AbsBoundProbit()):
         # log_hyp are log of hyperparameters, note that it is [length_0, ..., length_d, sigma_f, sigma_probit, v_beta]
         # Training points are split into relative and absolute for calculating f, but combined for predictions.  
+        self.set_observations(x_train, uvi_train, x_abs_train, y_train, y_abs_train)
+
+        self.delta_f = delta_f
+        self.rel_likelihood = likelihood
+        self.abs_likelihood = abs_likelihood
+
+        self.kern = GPy.kern.RBF(self._xdim, ARD=True)
+
+        self.Ix = np.eye(self._nx)
+
+    def set_observations(self, x_train, uvi_train, x_abs_train, y_train, y_abs_train):
         if x_train.shape[0] is not 0:
             self._xdim = x_train.shape[1]
         elif x_abs_train.shape[0] is not 0:
             self._xdim = x_abs_train.shape[1]
-        else: 
+        else:
             raise Exception("No Input Points")
-        self._nx = x_train.shape[0] + x_abs_train.shape[0]
         self._n_rel = x_train.shape[0]
         self._n_abs = x_abs_train.shape[0]
         self.x_train = x_train
@@ -239,16 +256,23 @@ class PreferenceGaussianProcess(object):
         self.x_abs_train = x_abs_train
         self.y_abs_train = y_abs_train
         self.uvi_train = uvi_train
-        self.delta_f = delta_f
+
 
         self.x_train_all = np.concatenate((self.x_train, self.x_abs_train), 0)
 
-        self.rel_likelihood = likelihood
-        self.abs_likelihood = abs_likelihood
-
-        self.kern = GPy.kern.RBF(self._xdim, ARD=True)
-
+        self._nx = self.x_train_all.shape[0]
         self.Ix = np.eye(self._nx)
+
+    def add_observations(self, x, y, uvi=None):
+        if uvi is None:
+            x_abs_train = np.concatenate((self.x_abs_train, x), 0)
+            y_abs_train = np.concatenate((self.y_abs_train, y), 0)
+            self.set_observations(self.x_train, self.uvi_train, x_abs_train, self.y_train, y_abs_train)
+        else:
+            x_train = np.concatenate((self.x_train, x), 0)
+            y_train = np.concatenate((self.y_train, y), 0)
+            uvi_train = np.concatenate((self.uvi_train, uvi+self.x_train.shape[0]), 0)
+            self.set_observations(x_train, uvi_train, self.x_abs_train, y_train, self.y_abs_train)
 
 
     def calc_laplace(self, loghyp, f=None):
@@ -265,7 +289,7 @@ class PreferenceGaussianProcess(object):
         # With current hyperparameters:
         self.Kxx = self.kern.K(self.x_train_all)
 
-        self.iK, logdetK = self._safe_invert_noise(self.Kxx)
+        self.iK, self.logdetK = self._safe_invert_noise(self.Kxx)
 
         # First, solve for \hat{f} and W (mode finding Laplace approximation, Newton-Raphson)
         f_error = self.delta_f + 1
@@ -318,6 +342,7 @@ class PreferenceGaussianProcess(object):
         self.W = W
         self.f = f
         self.iKf = np.matmul(self.iK, self.f)
+        self.KWI = np.matmul(self.W, self.Kxx) + self.Ix
 
         return f#, lml
 
@@ -338,7 +363,12 @@ class PreferenceGaussianProcess(object):
         return imat, logdet
 
     def calc_nlml(self, loghyp):
-        f,lml = self.calc_laplace(loghyp)
+        f = self.calc_laplace(loghyp)
+        # Now calculate the log likelihoods (remember log(ax) = log a + log x)
+        log_py_f_rel = self.rel_likelihood.log_likelihood(self.uvi_train, self.y_train, f)
+        log_py_f_abs = self.abs_likelihood.log_likelihood(self.y_abs_train, f[self._n_rel:]) #TODO: I would prefer to use the indexing in absolute ratings too for consistency
+        fiKf = np.matmul(f.T, self.iKf)
+        lml = log_py_f_rel.sum()+log_py_f_abs.sum() - 0.5*fiKf - 0.5*np.log(np.linalg.det(self.KWI))
         return -lml
 
     def predict_latent(self, x):
@@ -346,16 +376,22 @@ class PreferenceGaussianProcess(object):
         kt = self.kern.K(self.x_train_all, x)
         mean_latent = np.matmul(kt.T, self.iKf)
         Ktt = self.kern.K(x)
-        iKW = np.linalg.inv(np.matmul(self.W, self.Kxx) + self.Ix)
+        iKW = np.linalg.inv(self.KWI)
         var_latent = Ktt - np.matmul(kt.T, np.matmul(iKW, np.matmul(self.W, kt)))
         return mean_latent, var_latent
+
+    def predict_relative(self, x, uvi, fhat=None, varhat=None):
+        if fhat is None or varhat is None:
+            fhat, varhat = self.predict_latent(x)
+        p_y = self.rel_likelihood.prediction(fhat, varhat)
+        return p_y
 
     def expected_y(self, x, fhat=None, varhat=None):
         if fhat is None or varhat is None:
             fhat, varhat = self.predict_latent(x)
         #Ktt = self.kern.K(x)
         #var_star = 2*self.abs_likelihood.sigma**2 + np.atleast_2d(Ktt.diagonal()).T
-        E_y = self.abs_likelihood.expectation(fhat, np.atleast_2d(varhat.diagonal()).T)
+        E_y = self.abs_likelihood.prediction(fhat, np.atleast_2d(varhat.diagonal()).T)
         return E_y
 
 
