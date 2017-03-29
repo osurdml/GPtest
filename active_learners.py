@@ -27,7 +27,7 @@ class ActiveLearner(object):
         # Expected values0
         return self.GP.expected_y(x_test, fhat, vhat)
 
-    def posterior_likelihood(self, fhat, vhat, y_samples, mc_samples):
+    def abs_posterior_likelihood(self, fhat, vhat, y_samples, mc_samples):
         # Sampling from posterior to generate output pdfs
         p_y = np.zeros((len(y_samples), len(fhat)))
         iny = 1.0/len(y_samples)
@@ -35,7 +35,6 @@ class ActiveLearner(object):
             f_samples = mc_samples*vstar+fstar
             aa, bb = self.GP.abs_likelihood.get_alpha_beta(f_samples)
             p_y[:, i] = [iny*np.sum(beta.pdf(yj, aa, bb)) for yj in y_samples]
-            # p_y[:, i] /= np.sum(p_y[:, i])
         return p_y
 
     def get_observations(self):
@@ -75,16 +74,16 @@ class PeakComparitor(ActiveLearner):
         return max_ucb
 
 
-    def select_observation(self, domain=[0.0, 1.0], ntest=50, gamma=2.0):
+    def select_observation(self, domain=[0.0, 1.0], ntest=50, gamma=2.0, n_comparitors=1):
         crx, cuv, cax, cry, cay = self.get_observations()
 
         x_test = np.random.uniform(low=domain[0], high=domain[1], size=(ntest, 1))
         fhat, vhat = self.GP.predict_latent(x_test)
         max_x = np.argmax(fhat)
         other_x = np.delete(np.arange(ntest), max_x)
-        uv = np.vstack( (max_x*np.ones(ntest-1, dtype='int'), other_x) ).T
+        uv = np.vstack((max_x*np.ones(ntest-1, dtype='int'), other_x)).T
 
-        p_pref = self.GP.rel_likelihood.prediction(fhat, vhat, uv)
+        p_pref = self.GP.rel_likelihood.posterior_likelihood(fhat, vhat, uv, y=-1)
         V = np.zeros(ntest-1)
         x = np.zeros((2,1), dtype='float')
         x[0] = x_test[max_x]

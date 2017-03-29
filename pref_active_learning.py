@@ -10,16 +10,17 @@ import active_learners
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
-log_hyp = np.log([0.1,0.5,0.1,10.0]) # length_scale, sigma_f, sigma_probit, v_beta
+# log_hyp = np.log([0.1,0.5,0.1,10.0]) # length_scale, sigma_f, sigma_probit, v_beta
+log_hyp = np.log([0.07, 0.6, 0.25, 1.0, 28.1])
 np.random.seed(3)
 
 n_rel_train = 2
 n_abs_train = 1
-true_sigma = 0.05
+rel_sigma = 0.05
 delta_f = 1e-5
 
-beta_sigma = 0.5
-beta_v=20.0
+beta_sigma = 0.8
+beta_v = 20.0
 
 n_xplot = 101
 n_mcsamples = 1000
@@ -31,35 +32,29 @@ n_queries = 20
 def true_function(x):
     #y = (np.sin(x*2*np.pi + np.pi/4) + 1.25)/2.5
     #y = np.sin(x*2.0*np.pi + np.pi/4.0)
-    y = 0.3*np.cos(6*np.pi*(x-0.5))*np.exp(-10*(x-0.5)**2) + 0.5
+    y = np.cos(6 * np.pi * (x - 0.5)) * np.exp(-10 * (x - 0.5) ** 2)
     return y
 
-class ObservationFunction(object):
-    def __init__(self, true_fun):
-        self.f = true_fun
-
-    def generate_observations(self, x):
-        fx = self.f(x)
+rel_obs_fun = GPpref.RelObservationSampler(true_function, GPpref.PrefProbit(sigma=rel_sigma))
+abs_obs_fun = GPpref.AbsObservationSampler(true_function, GPpref.AbsBoundProbit(sigma=beta_sigma, v=beta_v))
 
 # Gaussian noise observation function
 def normal_obs_function(x):
     fx = true_function(x)
-    noise = np.random.normal(scale=true_sigma, size=x.shape)
+    noise = np.random.normal(scale=rel_sigma, size=x.shape)
     return fx + noise
 
 beta_obs = GPpref.AbsBoundProbit(sigma=beta_sigma, v=beta_v)
 
 def beta_obs_function(x):
     fx = true_function(x)
-    a, b = beta_obs.get_alpha_beta(fx)
+    mu = GPpref.mean_link(f)
+    a, b = beta_obs.get_alpha_beta(mu)
     z = [beta.rvs(aa, bb) for aa,bb in zip(a,b)]
     return z
 
-# Set target observation function
-obs_function = normal_obs_function
-
 def noisy_preference_rank(uv):
-    fuv = obs_function(uv)
+    fuv = normal_obs_function(uv)
     y = -1*np.ones((fuv.shape[0],1),dtype='int')
     y[fuv[:,1] > fuv[:,0]] = 1
     return y, fuv
@@ -89,8 +84,8 @@ else:
     fuv_train = np.zeros((0,2))
 
 x_abs_train = np.random.random((n_abs_train,1))
-#y_abs_train = obs_function(x_abs_train, true_sigma)
-y_abs_train = np.clip(obs_function(x_abs_train), 0.01, .99)
+y_abs_train = beta_obs_function(x_abs_train, sigma=rel_sigma)
+#y_abs_train = np.clip(normal_obs_function(x_abs_train), 0.01, .99)
 
 
 learner = active_learners.PeakComparitor(x_train, uvi_train, x_abs_train,  y_train, y_abs_train, delta_f=delta_f,
@@ -106,7 +101,7 @@ for obs_num in range(n_queries):
     fuv = np.array([[0, 1]])
     next_x = np.atleast_2d(learner.select_observation())
     if next_x.shape[0] == 1:
-        next_y = obs_function(next_x)
+        next_y = beta_obs_function(next_x, sigma=rel_sigma)
         learner.add_observations(next_x, next_y)
     else:
         next_y, next_f = noisy_preference_rank(next_x.T)
@@ -119,15 +114,18 @@ for obs_num in range(n_queries):
 fhat, vhat = learner.predict_latent(x_test)
 
 # Expected values
-E_y = learner.expected_y(x_test, fhat, vhat)
+E_y = learner.GP.abs_posterior_mean(x_test, fhat, vhat)
 
 # Sampling from posterior to show likelihoods
 mc_samples = np.random.normal(size=n_mcsamples)
 y_samples = np.linspace(0.01, 0.99, n_ysamples)
-p_y = learner.posterior_likelihood(fhat, vhat, y_samples, mc_samples)
+p_y = learner.GP.abs_posterior_likelihood(y_samples, fhat=fhat, varhat=vhat, normal_samples=mc_samples)
 
-hf, (ha, hb) = plt.subplots(1,2)
-hf, hpf = ptt.plot_with_bounds(ha, x_plot, y_plot, true_sigma, c=ptt.lines[0])
+hf_input, ha_input =plt.subplot(1,1)
+
+
+hf, (hb, ha) = plt.subplots(1,2)
+hf, hpf = ptt.plot_with_bounds(ha, x_plot, y_plot, rel_sigma, c=ptt.lines[0])
 ha.imshow(p_y, origin='lower', extent=[x_plot[0], x_plot[-1], 0.01, 0.99])
 
 if learner.GP.x_train.shape[0]>0:

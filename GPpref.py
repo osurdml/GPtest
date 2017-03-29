@@ -14,7 +14,7 @@ def std_norm_pdf(x):
     #return np.exp(-(x**2)/2)/_sqrt_2pi
 
 def std_norm_cdf(x):
-    x = np.clip(x, -30, 100 )
+    #x = np.clip(x, -30, 100 )
     return norm.cdf(x)
 
 # Define squared distance calculation function
@@ -28,6 +28,13 @@ def squared_distance(A,B):
     B2 = np.tile(B2_sum.T,(np.size(A2_sum,axis=0),1))
     sqDist = A2 + B2 - AB
     return sqDist
+
+def print_hyperparameters(theta, log=False):
+    if log is True:
+        theta = np.exp(theta)
+    nl = len(theta)-3
+    lstr = ', '.join(['%.2f']*nl) % tuple(theta[:nl])
+    print "l: {0}, sig_f: {1:0.2f}, sig: {2:0.2f}, v: {3:0.2f}".format(lstr, theta[-3], theta[-2], theta[-1])
 
 # Define squared exponential CovarianceFunction function
 class SquaredExponential(object):
@@ -60,9 +67,15 @@ class PrefProbit(object):
         self.sigma = sigma
         self._isqrt2sig = 1.0 / (self.sigma * np.sqrt(2.0))
         self._i2var =  self._isqrt2sig**2
+        
+    def print_hyperparameters(self):
+        print "Probit relative, Gaussian noise on latent. ",
+        print "Sigma: {0:0.2f}".format(self.sigma)
 
-    def z_k(self, uvi, y, f):
-        zc = self._isqrt2sig * (f[uvi[:, 1]] - f[uvi[:, 0]])
+    def z_k(self, y, f, scale=None):
+        if scale is None:
+            scale = self._isqrt2sig
+        zc = scale * (f[:, 1, None] - f[:, 0, None]) # Weird none is to preserve shape
         return y * zc
 
     def I_k(self, x, uv):  # Jensen and Nielsen
@@ -75,7 +88,7 @@ class PrefProbit(object):
 
     def derivatives(self, uvi, y, f):
         nx = len(f)
-        z = self.z_k(uvi, y=y, f=f)
+        z = self.z_k(y=y, f=self.get_rel_f(f, uvi))
         phi_z = std_norm_cdf(z)
         N_z = std_norm_pdf(z)
 
@@ -96,22 +109,34 @@ class PrefProbit(object):
 
         return W, dpy_df
 
-    def likelihood(self, uvi, y, f):
-        z = self.z_k(uvi, y=y, f=f)
+    def get_rel_f(self, f, uvi):
+        return np.hstack((f[uvi[:, 0]], f[uvi[:, 1]]))
+
+    def likelihood(self, y, f, scale=None):
+        z = self.z_k(y, f, scale=scale)
         phi_z = std_norm_cdf(z)
         return phi_z
 
-    def log_likelihood(self, uvi, y, f):
-        return np.log(self.likelihood(uvi, y, f))
+    def log_likelihood(self, y, f):
+        return np.log(self.likelihood(y, f))
 
-    def prediction(self, fhat, varhat, uvi):
+    def posterior_likelihood(self, fhat, varhat, uvi, y=1): # This is the likelihood assuming a Gaussian over f
         var_star = 2*self.sigma**2 + np.atleast_2d([varhat[u, u] + varhat[v, v] - varhat[u, v] - varhat[v, v] for u,v in uvi]).T
-        p_y = std_norm_cdf( (fhat[uvi[:,0]] - fhat[uvi[:,1]])/np.sqrt(var_star) )
+        p_y = self.likelihood(y, self.get_rel_f(fhat, uvi), 1.0/np.sqrt(var_star))
         return p_y
+
+    def generate_samples(self, f):
+        fuv = f + np.random.normal(scale=self.sigma, size=f.shape)
+        y = -1 * np.ones((fuv.shape[0], 1), dtype='int')
+        y[fuv[:, 1] > fuv[:, 0]] = 1
+        return y, fuv
 
 class AbsBoundProbit(object):
     def __init__(self, sigma=1.0, v=10.0):
-        # Making v=10 looks good on a graph, but I'm not sure what it's actually supposed to be.  
+        # v is the precision, kind of related to inverse of noise, high v is sharp distributions
+        # sigma is the slope of the probit, basically scales how far away from 
+        # 0 the latent has to be to to move away from 0.5 output. Sigma should 
+        # basically relate to the range of the latent function
         self.set_sigma(sigma)
         self.set_v(v)
         self.log2pi = np.log(2.0*np.pi)
@@ -123,6 +148,10 @@ class AbsBoundProbit(object):
 
     def set_v(self, v):
         self.v = v
+        
+    def print_hyperparameters(self):
+        print "Beta distribution, probit mean link.",
+        print "Sigma: {0:0.2f}, v: {1:0.2f}".format(self.sigma, self.v)
 
     def mean_link(self, f):
         ml = np.clip(std_norm_cdf(f*self._isqrt2sig), 1e-12, 1.0-1e-12)
@@ -149,98 +178,49 @@ class AbsBoundProbit(object):
 
     def derivatives(self, y, f):
 
-        #print "Start Iter.  f, y"
-        #print f
-        #print y
         alpha = self.alpha(f)
         beta = self.beta(f) #let's make a distribution called beta that also has beta as a parameter!
-        # print "Alpha: " + str(alpha)
-        # print "Beta: " + str(beta) 
 
-        # Estimate dpy_df
-        delta = 0.001
-        #print "Estimated dpy_df"
-        #est_dpy_df = (self.log_likelihood(y, f+delta) - self.log_likelihood(y, f-delta))/(2*delta)
-        #print est_dpy_df
-        #print 'log likelihood'
-        #print np.sum(self.log_likelihood(y, f))
-
-        #print "Estimated W"
-        #est_W_diag = (self.log_likelihood(y, f+2*delta) - 2*self.log_likelihood(y,f) + self.log_likelihood(y, f-2*delta))/(2*delta)**2
-
-        #print est_W_diag
-
-        # Theres a dot in Jensen that I'm hoping is just a typo. I didn't fully derive it, but it looks correct.   
-        # As the iteration goes, f blows up.  This makes parts of alpha, beta go to v and 0.  Digamma(0)=-inf :(
-        # So why is it blowing up?
         dpy_df = self.v*self._isqrt2sig*std_norm_pdf(f*self._isqrt2sig) * (np.log(y)-np.log(1-y) - digamma(alpha) + digamma(beta) )
 
-        Wdiag =  - self.v*self._isqrt2sig*std_norm_pdf(f*self._isqrt2sig) * (
+        Wdiag = - self.v*self._isqrt2sig*std_norm_pdf(f*self._isqrt2sig) * (
                     f*self._i2var*( np.log(y)-np.log(1.0-y)-digamma(alpha) + digamma(beta) ) +
                     self.v*self._isqrt2sig*std_norm_pdf(f*self._isqrt2sig) * (polygamma(1, alpha) + polygamma(1, beta)) )
-        # print "Wdiag"
-        # print Wdiag
 
         W = np.diagflat(Wdiag)
 
         return -W, dpy_df
 
-    def log_marginal(self):
-        pass
-
-    def prediction(self, fhat, var_star):
+    def posterior_mean(self, fhat, var_star):
         #mu_t = self.mean_link(fhat)
         E_x = np.clip(std_norm_cdf(fhat/(np.sqrt(2*self.sigma**2 + var_star))), 1e-12, 1.0-1e-12)
         return E_x
 
-class AbsProbit(object):
-    # The Probit Likelihood given in Rasmussen, p43.  Note f(x) is scaled by sqrt(2)*sigma, as in Jensen.  
-    # Ok, yeah, this was totally wrong.  Don't use this.  
-    def __init__(self, sigma=1.0, v=10.0):
-        self.set_sigma(sigma)
-        self.log2pi = np.log(2.0*np.pi)
+    def generate_samples(self, f):
+        mu = self.mean_link(f)
+        a, b = self.get_alpha_beta(f)
+        z = np.zeros(f.shape, dtype='float')
+        for i, (aa,bb) in enumerate(zip(a,b)):
+            z[i] = beta.rvs(aa, bb)
+        return z, mu
 
-    def set_sigma(self, sigma):
-        self.sigma = sigma
-        self._isqrt2sig = 1.0 / (self.sigma * np.sqrt(2.0))
-        self._i2var =  self._isqrt2sig**2
-
-    def derivatives(self, y, f):
-
-        print "Start Iter.  f, y"
-        print f
-        print y
-
-        # dpy_df = -y*std_norm_pdf(f*self._isqrt2sig) / std_norm_cdf(y*f*self._isqrt2sig)
-
-        # Wdiag = -(-np.power(std_norm_pdf(f*self._isqrt2sig) / std_norm_cdf(y*f*self._isqrt2sig),2)
-        #             -y*f*self._isqrt2sig*std_norm_pdf(f*self._isqrt2sig) / std_norm_cdf(y*f*self._isqrt2sig))
-
-        dpy_df = -y*std_norm_pdf(f) / std_norm_cdf(y*f)
-
-        Wdiag = -(-np.power(std_norm_pdf(f) / std_norm_cdf(y*f),2)
-                    -y*f*std_norm_pdf(f) / std_norm_cdf(y*f))
-
-        W = np.diagflat(Wdiag)
-
-        return W, dpy_df
-        
-        
 
 class PreferenceGaussianProcess(object):
 
-    def __init__(self, x_train, uvi_train, x_abs_train, y_train, y_abs_train, likelihood=PrefProbit(), delta_f = 1e-6, abs_likelihood=AbsBoundProbit()):
+    def __init__(self, x_train, uvi_train, x_abs_train, y_train, y_abs_train, rel_likelihood=PrefProbit(), delta_f = 1e-6, abs_likelihood=AbsBoundProbit()):
         # log_hyp are log of hyperparameters, note that it is [length_0, ..., length_d, sigma_f, sigma_probit, v_beta]
         # Training points are split into relative and absolute for calculating f, but combined for predictions.  
         self.set_observations(x_train, uvi_train, x_abs_train, y_train, y_abs_train)
 
         self.delta_f = delta_f
-        self.rel_likelihood = likelihood
+        self.rel_likelihood = rel_likelihood
         self.abs_likelihood = abs_likelihood
 
         self.kern = GPy.kern.RBF(self._xdim, ARD=True)
 
         self.Ix = np.eye(self._nx)
+
+        self.f = None
 
     def set_observations(self, x_train, uvi_train, x_abs_train, y_train, y_abs_train):
         if x_train.shape[0] is not 0:
@@ -274,17 +254,17 @@ class PreferenceGaussianProcess(object):
             uvi_train = np.concatenate((self.uvi_train, uvi+self.x_train.shape[0]), 0)
             self.set_observations(x_train, uvi_train, self.x_abs_train, y_train, self.y_abs_train)
 
-
-    def calc_laplace(self, loghyp, f=None):
+    def calc_laplace(self, loghyp):
         self.kern.lengthscale = np.exp(loghyp[0:self._xdim])
         self.kern.variance = (np.exp(loghyp[self._xdim]))**2
-        self.rel_likelihood.set_sigma = np.exp(loghyp[-2]) # Do we need different sigmas for each likelihood?  Hopefully No?
-        self.abs_likelihood.set_sigma = np.exp(loghyp[-2])
-        self.abs_likelihood.set_v = np.exp(loghyp[-1])
+        self.rel_likelihood.set_sigma(np.exp(loghyp[-3])) # Do we need different sigmas for each likelihood? Yes!
+        self.abs_likelihood.set_sigma(np.exp(loghyp[-2])) # I think this sigma relates to sigma_f in the covariance, and is actually possibly redundant
+        self.abs_likelihood.set_v(np.exp(loghyp[-1]))     # Should this relate to the rel_likelihood probit noise?
 
-        if f is None:
-            f = np.ones((self._nx, 1))
-            f = f*.0
+        if self.f is None or self.f.shape[0] is not self._nx:
+            f = np.zeros((self._nx, 1), dtype='float')
+        else:
+            f = self.f
 
         # With current hyperparameters:
         self.Kxx = self.kern.K(self.x_train_all)
@@ -364,8 +344,10 @@ class PreferenceGaussianProcess(object):
 
     def calc_nlml(self, loghyp):
         f = self.calc_laplace(loghyp)
+        if self.f is None:
+            self.f = f
         # Now calculate the log likelihoods (remember log(ax) = log a + log x)
-        log_py_f_rel = self.rel_likelihood.log_likelihood(self.uvi_train, self.y_train, f)
+        log_py_f_rel = self.rel_likelihood.log_likelihood(self.y_train, self.rel_likelihood.get_rel_f(f, self.uvi_train))
         log_py_f_abs = self.abs_likelihood.log_likelihood(self.y_abs_train, f[self._n_rel:]) #TODO: I would prefer to use the indexing in absolute ratings too for consistency
         fiKf = np.matmul(f.T, self.iKf)
         lml = log_py_f_rel.sum()+log_py_f_abs.sum() - 0.5*fiKf - 0.5*np.log(np.linalg.det(self.KWI))
@@ -380,21 +362,112 @@ class PreferenceGaussianProcess(object):
         var_latent = Ktt - np.matmul(kt.T, np.matmul(iKW, np.matmul(self.W, kt)))
         return mean_latent, var_latent
 
-    def predict_relative(self, x, uvi, fhat=None, varhat=None):
-        if fhat is None or varhat is None:
-            fhat, varhat = self.predict_latent(x)
-        p_y = self.rel_likelihood.prediction(fhat, varhat)
+    def _check_latent_input(self, x=None, fhat=None, varhat=None):
+        if (fhat is None or varhat is None):
+            if x is not None:
+                fhat, varhat = self.predict_latent(x)
+            else:
+                raise ValueError('Must supply either x or fhat and varhat')
+        return fhat, varhat
+
+    def rel_posterior_likelihood(self, uvi, y, x=None, fhat=None, varhat=None):
+        fhat, varhat = self._check_latent_input(x, fhat, varhat)
+        p_y = self.rel_likelihood.posterior_likelihood(fhat, varhat, uvi, y)
         return p_y
 
-    def expected_y(self, x, fhat=None, varhat=None):
-        if fhat is None or varhat is None:
-            fhat, varhat = self.predict_latent(x)
-        #Ktt = self.kern.K(x)
-        #var_star = 2*self.abs_likelihood.sigma**2 + np.atleast_2d(Ktt.diagonal()).T
-        E_y = self.abs_likelihood.prediction(fhat, np.atleast_2d(varhat.diagonal()).T)
+    def rel_posterior_likelihood_array(self, x=None, fhat=None, varhat=None, y=-1):
+        fhat, varhat = self._check_latent_input(x, fhat, varhat)
+        p_y = np.zeros((fhat.shape[0], fhat.shape[0]), dtype='float')
+        cross_uvi = np.zeros((fhat.shape[0],2), dtype='int')
+        cross_uvi[:, 1] = np.arange(fhat.shape[0])
+        for i in cross_uvi[:, 1]:
+            cross_uvi[:, 0] = i
+            p_y[:, i:i+1] = self.rel_likelihood.posterior_likelihood(fhat, varhat, cross_uvi, y)
+        return p_y
+
+    def rel_posterior_MAP(self, uvi, x=None, fhat=None, varhat=None):
+        p_y = self.rel_posterior_likelihood(uvi, y=1, x=x, fhat=fhat, varhat=varhat)
+        return 2*np.array(p_y < 0.5, dtype='int')-1
+
+    def abs_posterior_likelihood(self, y, x=None, fhat=None, varhat=None, normal_samples = None): # Currently sample-based
+        fhat, varhat = self._check_latent_input(x, fhat, varhat)
+        varhat = np.atleast_2d(varhat.diagonal()).T
+        if normal_samples is None:
+            normal_samples = np.random.normal(size=1000)
+        iny = 1.0/len(normal_samples)
+
+        # Sampling from posterior to show likelihoods
+        p_y = np.zeros((y.shape[0], fhat.shape[0]))
+        for i, (fstar, vstar) in enumerate(zip(fhat, varhat)):
+            f_samples = normal_samples * vstar + fstar
+            p_y[:, i] = [iny * np.sum(self.abs_likelihood.likelihood(yj, f_samples)) for yj in y]
+        return p_y
+
+    def abs_posterior_mean(self, x=None, fhat=None, varhat=None):
+        fhat, varhat = self._check_latent_input(x, fhat, varhat)
+        varstar = np.atleast_2d(varhat.diagonal()).T
+        E_y = self.abs_likelihood.posterior_mean(fhat, varstar)
         return E_y
 
+    def print_hyperparameters(self):
+        print "COV: '{0}', l: {1}, sigma_f: {2}".format(self.kern.name, self.kern.lengthscale.values, np.sqrt(self.kern.variance.values))
+        print "REL: ",
+        self.rel_likelihood.print_hyperparameters()
+        print "ABS: ",
+        self.abs_likelihood.print_hyperparameters()
 
 
+class ObservationSampler(object):
+    def __init__(self, true_fun, likelihood_object):
+        self.f = true_fun
+        self.l = likelihood_object
+
+    def generate_observations(self, x):
+        fx = self.f(x)
+        y, ff = self.l.generate_samples(fx)
+        return y, ff
+
+
+class AbsObservationSampler(ObservationSampler):
+    def observation_likelihood_array(self, x, y):
+        fx = self.f(x)
+        p_y = np.zeros((y.shape[0], fx.shape[0]), dtype='float')
+        for i, fxi in enumerate(fx):
+            p_y[:, i:i + 1] = self.l.likelihood(y, fxi[0])
+        return p_y
+
+    def mean_link(self, x):
+        fx = self.f(x)
+        return self.l.mean_link(fx)
+
+
+class RelObservationSampler(ObservationSampler):
+    def observation_likelihood_array(self, x, y=-1):
+        fx = self.f(x)
+        p_y = np.zeros((x.shape[0], x.shape[0]), dtype='float')
+        cross_fx = np.hstack((np.zeros((x.shape[0], 1)), fx))
+        for i, fxi in enumerate(fx):
+            cross_fx[:, 0] = fxi
+            p_y[:, i:i + 1] = self.l.likelihood(y, cross_fx)
+        return p_y
+
+
+
+
+
+
+# SCRAP:
+        # Estimate dpy_df
+        # delta = 0.001
+        # print "Estimated dpy_df"
+        # est_dpy_df = (self.log_likelihood(y, f+delta) - self.log_likelihood(y, f-delta))/(2*delta)
+        # print est_dpy_df
+        # print 'log likelihood'
+        # print np.sum(self.log_likelihood(y, f))
+        #
+        # print "Estimated W"
+        # est_W_diag = (self.log_likelihood(y, f+2*delta) - 2*self.log_likelihood(y,f) + self.log_likelihood(y, f-2*delta))/(2*delta)**2
+        #
+        # print est_W_diag
 
 

@@ -4,66 +4,42 @@ import matplotlib.pyplot as plt
 import GPpref
 import scipy.optimize as op
 import plot_tools as ptt
-import mcmc
-from scipy.stats import beta
+# from scipy.stats import beta
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
-log_hyp = np.log([0.1,0.5,0.1,10.0]) # length_scale, sigma_f, sigma_probit, v_beta
-np.random.seed(3)
+train_hyper = True
 
-n_rel_train = 10
-n_abs_train = 10
-true_sigma = 0.05
+log_hyp = np.log([0.2, 0.5, 0.1, 1.0, 10.0]) # length_scale/s, sigma_f, sigma_n_abs, sigma_beta, v_beta
+np.random.seed(1)
+
+n_rel_train = 30
+n_abs_train = 30
+rel_sigma = 0.2
 delta_f = 1e-5
+
+beta_sigma = 0.8
+beta_v = 20.0
 
 n_xplot = 101
 n_mcsamples = 1000
 n_ysamples = 101
+marker_options = {'mec':'k', 'mew':0.5}
 
 # Define polynomial function to be modelled
 def true_function(x):
-    y = (np.sin(x*2*np.pi + np.pi/4) + 1.25)/2.5
+    y = np.cos(6 * np.pi * (x - 0.5)) * np.exp(-10 * (x - 0.5) ** 2)
+    #y = (np.sin(x*2*np.pi + np.pi/4))/1.2
     #y = np.sin(x*2.0*np.pi + np.pi/4.0)
     return y
 
-class ObservationFunction(object):
-    def __init__(self, true_fun):
-        self.f = true_fun
 
-    def generate_observations(self, x):
-        fx = self.f(x)
-
-
-
-
-# Gaussian noise observation function
-def normal_obs_function(x):
-    fx = true_function(x)
-    noise = np.random.normal(scale=true_sigma, size=x.shape)
-    return fx + noise
-
-beta_obs = GPpref.AbsBoundProbit(sigma=true_sigma, v=10.0)
-
-def beta_obs_function(x):
-    fx = true_function(x)
-    a, b = beta_obs.get_alpha_beta(fx)
-    z = [beta.rvs(aa, bb) for aa,bb in zip(a,b)]
-    return z
-
-# Set target observation function
-obs_function = normal_obs_function
-
-def noisy_preference_rank(uv):
-    fuv = obs_function(uv)
-    y = -1*np.ones((fuv.shape[0],1),dtype='int')
-    y[fuv[:,1] > fuv[:,0]] = 1
-    return y, fuv
+rel_obs_fun = GPpref.RelObservationSampler(true_function, GPpref.PrefProbit(sigma=rel_sigma))
+abs_obs_fun = GPpref.AbsObservationSampler(true_function, GPpref.AbsBoundProbit(sigma=beta_sigma, v=beta_v))
 
 # Main program
 # True function
 x_plot = np.linspace(0.0,1.0,n_xplot,dtype='float')
-y_plot = true_function(x_plot)
 x_test = np.atleast_2d(x_plot).T
 
 # Training data - this is a bit weird, but we sample x values, then the uv pairs
@@ -74,8 +50,8 @@ if n_rel_train > 0:
     uvi_train = np.random.choice(range(2*n_rel_train), (n_rel_train,2), replace=False)
     uv_train = x_train[uvi_train][:,:,0]
 
-    # Get noisy observations f(uv) and corresponding ranks y_train
-    y_train, fuv_train = noisy_preference_rank(uv_train)
+    # Get labels (y), and noisy observations f(uv) and corresponding ranks y_train
+    y_train, fuv_train = rel_obs_fun.generate_observations(uv_train)
 
 else:
     x_train = np.zeros((0,1))
@@ -84,81 +60,105 @@ else:
     y_train = np.zeros((0,1))
     fuv_train = np.zeros((0,2))
 
+# For absolute points, get observation y and beta mean mu
 x_abs_train = np.random.random((n_abs_train,1))
-#y_abs_train = obs_function(x_abs_train, true_sigma)
-y_abs_train = np.clip(obs_function(x_abs_train), 0.01, .99)
+y_abs_train, mu_abs_train = abs_obs_fun.generate_observations(x_abs_train)
 
+prefGP = GPpref.PreferenceGaussianProcess(x_train, uvi_train, x_abs_train,  y_train, y_abs_train,
+                                          delta_f=delta_f,
+                                          rel_likelihood=GPpref.PrefProbit(),
+                                          abs_likelihood=GPpref.AbsBoundProbit())
 
+# If training hyperparameters, use external optimiser
+if train_hyper:
+    log_hyp = op.fmin(prefGP.calc_nlml,log_hyp)
 
-# GP hyperparameters
-# note: using log scaling to aid learning hyperparameters with varied magnitudes
-
-print "Data"
-# print x_train
-print x_abs_train
-# print y_train
-print y_abs_train
-# print uvi_train
-
-prefGP = GPpref.PreferenceGaussianProcess(x_train, uvi_train, x_abs_train,  y_train, y_abs_train, delta_f=delta_f,abs_likelihood=GPpref.AbsBoundProbit(sigma=0.5, v=20.0))
-
-# Pseudocode:
-# FOr a set of hyperparameters, return log likelihood that can be used by an optimiser
-theta0 = log_hyp
-
-log_hyp = op.fmin(prefGP.calc_nlml,theta0)
-#f,lml = prefGP.calc_laplace(log_hyp)
 f = prefGP.calc_laplace(log_hyp)
+prefGP.print_hyperparameters()
 
 # Latent predictions
 fhat, vhat = prefGP.predict_latent(x_test)
-vhat = np.atleast_2d(vhat.diagonal()).T
 
 # Expected values
-E_y = prefGP.expected_y(x_test, fhat, vhat)
+E_y = prefGP.abs_posterior_mean(x_test, fhat, vhat)
 
-# Sampling from posterior to show likelihoods
-p_y = np.zeros((n_ysamples, n_xplot))
-y_samples = np.linspace(0.01, 0.99, n_ysamples)
-iny = 1.0/n_ysamples
-E_y2 = np.zeros(n_xplot)
+# Absolute posterior likelihood (MC sampled)
+mc_samples = np.random.normal(size=n_mcsamples)
+abs_y_samples = np.atleast_2d(np.linspace(0.01, 0.99, n_ysamples)).T
+p_y = prefGP.abs_posterior_likelihood(abs_y_samples, fhat=fhat, varhat=vhat, normal_samples=mc_samples)
 
-normal_samples = np.random.normal(size=n_mcsamples)
-for i,(fstar,vstar) in enumerate(zip(fhat, vhat)):
-    f_samples = normal_samples*vstar+fstar
-    aa, bb = prefGP.abs_likelihood.get_alpha_beta(f_samples)
-    p_y[:, i] = [iny*np.sum(beta.pdf(yj, aa, bb)) for yj in y_samples]
-    p_y[:, i] /= np.sum(p_y[:, i])
-    E_y2[i] = np.sum(np.dot(y_samples, p_y[:, i]))
+# PLOTTING
 
-# New y's are expectations from Beta distribution. E(X) = alpha/(alpha+beta)
-#alph = prefGP.abs_likelihood.alpha(f)
-#bet = prefGP.abs_likelihood.beta(f)
-#Ey = alph/(alph+bet)
+# Plot true function, likelihoods and observations
+fig_t, (ax_t_l, ax_t_a, ax_t_r) = ptt.plot_setup_2d(t_l=r'True latent function, $f(x)$')
 
-hf, (ha, hb) = plt.subplots(1,2)
-hf, hpf = ptt.plot_with_bounds(ha, x_plot, y_plot, true_sigma, c=ptt.lines[0])
+# True latent
+f_true = abs_obs_fun.f(x_test)
+ptt.plot_with_bounds(ax_t_l, x_test, f_true, rel_sigma, c=ptt.lines[0])
 
-if x_train.shape[0]>0:
-    for uv,fuv,y in zip(uv_train, fuv_train, y_train):
-        ha.plot(uv, fuv, 'b-', color=ptt.lighten(ptt.lines[0]))
-        ha.plot(uv[(y+1)/2],fuv[(y+1)/2],'+', color=ptt.darken(ptt.lines[0], 1.5))
-
+# True absolute likelihood
+p_abs_y_true = abs_obs_fun.observation_likelihood_array(x_test, abs_y_samples)
+abs_extent = [x_test[0,0], x_test[-1,0], abs_y_samples[0,0], abs_y_samples[-1,0]]
+h_pat = ax_t_a.imshow(p_abs_y_true, origin='lower', extent=abs_extent)
 if x_abs_train.shape[0]>0:
-    ha.plot(x_abs_train, y_abs_train, '+', color=ptt.lighten(ptt.lines[2]))
+    ax_t_a.plot(x_abs_train, y_abs_train, 'w+')
+mu_true = abs_obs_fun.mean_link(x_test)
+h_yt, = ax_t_a.plot(x_test, mu_true, c=ptt.lines[0])
+ax_t_a.legend([h_yt], ['$E(y|f(x))$'])
+fig_t.colorbar(h_pat, ax=ax_t_a)
+    
+# True relative likelihood
+p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
+rel_y_extent = [x_test.min(), x_test.max(), x_test.min(), x_test.max()]
+h_prt = ptt.plot_relative_likelihood(ax_t_r, p_rel_y_true, extent=rel_y_extent)
+class_icons = ['ko','wo']
+if x_train.shape[0] > 0:
+    for uv, fuv, y in zip(uv_train, fuv_train, y_train):
+        ax_t_r.plot(uv[0], uv[1], class_icons[(y[0]+1)/2], **marker_options)
+        ax_t_l.plot(uv, fuv, 'b-', color=ptt.lighten(ptt.lines[0]))
+        ax_t_l.plot(uv[(y+1)/2], fuv[(y+1)/2], class_icons[(y[0]+1)/2], **marker_options) # '+', color=ptt.darken(ptt.lines[0], 1.5)
 
-hfhat, hpfhat = ptt.plot_with_bounds(hb, x_test, fhat, np.sqrt(vhat), c=ptt.lines[1])
-hEy, = ha.plot(x_plot, E_y, color=ptt.lines[3])
+# Posterior estimates
+fig_p, (ax_p_l, ax_p_a, ax_p_r) = ptt.plot_setup_2d(
+    t_a=r'Posterior absolute likelihood, $p(y | \mathcal{Y}, \theta)$',
+    t_r=r'Posterior relative likelihood $P(x_0 \succ x_1 | \mathcal{Y}, \theta)$')
 
-ha.imshow(p_y, origin='lower', extent=[x_plot[0], x_plot[-1], 0.01, 0.99])
-# ha.plot(x_plot, E_y2, color=ptt.lines[4])
-hmap, = ha.plot(x_plot, y_samples[np.argmax(p_y, axis=0)], color='w')
-ha.set_title('Training data')
-ha.set_ylabel('$y$')
-ha.set_xlabel('$x$')
-hb.set_xlabel('$x$')
-hb.set_ylabel('$f(x)$')
-ha.legend([hf, hEy, hmap], [r'$f(x)$', r'$\mathbb{E}_{p(y|\mathcal{Y})}\left[y\right]$', r'$y_{MAP} | \mathcal{Y}$'])
-hb.legend([hfhat], [r'Latent function $\hat{f}(x)$'])
+# Latent function
+hf, hpf = ptt.plot_with_bounds(ax_p_l, x_test, f_true, rel_sigma, c=ptt.lines[0])
 
+hf_hat, hpf_hat = ptt.plot_with_bounds(ax_p_l, x_test, fhat, np.sqrt(np.atleast_2d(vhat.diagonal()).T), c=ptt.lines[1])
+ax_p_l.legend([hf, hf_hat], [r'True latent function, $f(x)$', r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
+
+# Absolute posterior likelihood
+h_pap = ax_p_a.imshow(p_y, origin='lower', extent=abs_extent)
+h_yt, = ax_p_a.plot(x_test, mu_true, c=ptt.lines[0])
+hEy, = ax_p_a.plot(x_plot, E_y, color=ptt.lines[3])
+if x_abs_train.shape[0]>0:
+    ax_p_a.plot(x_abs_train, y_abs_train, 'w+')
+ax_p_a.legend([h_yt, hEy], [r'True mean, $E_{p(y|f(x))}[y]$', r'Posterior mean, $E_{p(y|\mathcal{Y})}\left[y\right]$'])
+fig_p.colorbar(h_pap, ax=ax_p_a)
+
+# Relative posterior likelihood
+p_rel_y_post = prefGP.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
+h_prp = ptt.plot_relative_likelihood(ax_p_r, p_rel_y_post, extent=rel_y_extent)
+if x_train.shape[0] > 0:
+    for uv, fuv, y in zip(uv_train, fuv_train, y_train):
+        ax_p_r.plot(uv[0], uv[1], class_icons[(y[0]+1)/2], **marker_options)
+        ax_p_l.plot(uv, fuv, 'b-', color=ptt.lighten(ptt.lines[0]))
+        ax_p_l.plot(uv[(y+1)/2], fuv[(y+1)/2], class_icons[(y[0]+1)/2], **marker_options) # '+', color=ptt.darken(ptt.lines[0], 1.5)
 plt.show()
+
+
+## SCRAP
+# p_y = np.zeros((n_ysamples, n_xplot))
+# y_samples = np.linspace(0.01, 0.99, n_ysamples)
+# iny = 1.0/n_ysamples
+# E_y2 = np.zeros(n_xplot)
+#
+# normal_samples = np.random.normal(size=n_mcsamples)
+# for i,(fstar,vstar) in enumerate(zip(fhat, vhat.diagonal())):
+#     f_samples = normal_samples*vstar+fstar
+#     aa, bb = prefGP.abs_likelihood.get_alpha_beta(f_samples)
+#     p_y[:, i] = [iny*np.sum(beta.pdf(yj, aa, bb)) for yj in y_samples]
+#     p_y[:, i] /= np.sum(p_y[:, i])
+#     E_y2[i] = np.sum(np.dot(y_samples, p_y[:, i]))
