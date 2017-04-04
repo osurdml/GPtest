@@ -1,22 +1,25 @@
 # Simple 1D GP classification example
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import GPpref
-import scipy.optimize as op
 import plot_tools as ptt
-import mcmc
-from scipy.stats import beta
 import active_learners
+import test_data
+
+nowstr = time.strftime("%Y_%m_%d-%H_%M")
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
-# log_hyp = np.log([0.1,0.5,0.1,10.0]) # length_scale, sigma_f, sigma_probit, v_beta
-log_hyp = np.log([0.07, 0.6, 0.25, 1.0, 28.1])
-np.random.seed(3)
+save_plots = True
 
-n_rel_train = 2
+# log_hyp = np.log([0.1,0.5,0.1,10.0]) # length_scale, sigma_f, sigma_probit, v_beta
+log_hyp = np.log([0.07, 0.75, 0.25, 1.0, 28.1])
+np.random.seed(0)
+
+n_rel_train = 1
 n_abs_train = 1
-rel_sigma = 0.05
+rel_sigma = 0.2
 delta_f = 1e-5
 
 beta_sigma = 0.8
@@ -28,126 +31,75 @@ n_ysamples = 101
 
 n_queries = 20
 
-# Define function to be modelled
-def true_function(x):
-    #y = (np.sin(x*2*np.pi + np.pi/4) + 1.25)/2.5
-    #y = np.sin(x*2.0*np.pi + np.pi/4.0)
-    y = np.cos(6 * np.pi * (x - 0.5)) * np.exp(-10 * (x - 0.5) ** 2)
-    return y
+# Define polynomial function to be modelled
+true_function = test_data.multi_peak
+
+if save_plots:
+    nowstr = time.strftime("%Y_%m_%d-%H_%M")
+    fig_dir = 'fig/' + nowstr + '/'
+    ptt.ensure_dir(fig_dir)
+    print "Figures will be saved to: {0}".format(fig_dir)
 
 rel_obs_fun = GPpref.RelObservationSampler(true_function, GPpref.PrefProbit(sigma=rel_sigma))
 abs_obs_fun = GPpref.AbsObservationSampler(true_function, GPpref.AbsBoundProbit(sigma=beta_sigma, v=beta_v))
 
-# Gaussian noise observation function
-def normal_obs_function(x):
-    fx = true_function(x)
-    noise = np.random.normal(scale=rel_sigma, size=x.shape)
-    return fx + noise
-
-beta_obs = GPpref.AbsBoundProbit(sigma=beta_sigma, v=beta_v)
-
-def beta_obs_function(x):
-    fx = true_function(x)
-    mu = GPpref.mean_link(f)
-    a, b = beta_obs.get_alpha_beta(mu)
-    z = [beta.rvs(aa, bb) for aa,bb in zip(a,b)]
-    return z
-
-def noisy_preference_rank(uv):
-    fuv = normal_obs_function(uv)
-    y = -1*np.ones((fuv.shape[0],1),dtype='int')
-    y[fuv[:,1] > fuv[:,0]] = 1
-    return y, fuv
-
-# Main program
 # True function
 x_plot = np.linspace(0.0,1.0,n_xplot,dtype='float')
-y_plot = true_function(x_plot)
 x_test = np.atleast_2d(x_plot).T
+f_true = abs_obs_fun.f(x_test)
+mu_true = abs_obs_fun.mean_link(x_test)
+mc_samples = np.random.normal(size=n_mcsamples)
+abs_y_samples = np.atleast_2d(np.linspace(0.01, 0.99, n_ysamples)).T
+p_abs_y_true = abs_obs_fun.observation_likelihood_array(x_test, abs_y_samples)
+p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
 
-# Training data - this is a bit weird, but we sample x values, then the uv pairs
-# are actually indexes into x, because it is easier computationally. You can
-# recover the actual u,v values using x[ui],x[vi]
-if n_rel_train > 0:
-    x_train = np.random.random((2*n_rel_train,1))
-    uvi_train = np.random.choice(range(2*n_rel_train), (n_rel_train,2), replace=False)
-    uv_train = x_train[uvi_train][:,:,0]
-
-    # Get noisy observations f(uv) and corresponding ranks y_train
-    y_train, fuv_train = noisy_preference_rank(uv_train)
-
-else:
-    x_train = np.zeros((0,1))
-    uvi_train = np.zeros((0,2))
-    uv_train = np.zeros((0,2))
-    y_train = np.zeros((0,1))
-    fuv_train = np.zeros((0,2))
-
-x_abs_train = np.random.random((n_abs_train,1))
-y_abs_train = beta_obs_function(x_abs_train, sigma=rel_sigma)
-#y_abs_train = np.clip(normal_obs_function(x_abs_train), 0.01, .99)
+# Training data
+x_rel, uvi_rel, uv_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(n_rel_train, n_xdim=1)
+x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(n_abs_train, n_xdim=1)
 
 
-learner = active_learners.PeakComparitor(x_train, uvi_train, x_abs_train,  y_train, y_abs_train, delta_f=delta_f,
-                                          abs_likelihood=GPpref.AbsBoundProbit(sigma=beta_sigma, v=beta_v))
+# Plot true functions
+fig_t, (ax_t_l, ax_t_a, ax_t_r) = ptt.true_plots(x_test, f_true, mu_true, rel_sigma,
+                                                 abs_y_samples, p_abs_y_true, p_rel_y_true,
+                                                 x_abs, y_abs, uv_rel, fuv_rel, y_rel,
+                                                 t_l=r'True latent function, $f(x)$')
+if save_plots:
+    fig_t.savefig(fig_dir+'true.pdf', bbox_inches='tight')
 
-theta0 = log_hyp
+# Construct active learner object
+learner = active_learners.LikelihoodImprovement(x_rel, uvi_rel, x_abs,  y_rel, y_abs, delta_f=delta_f,
+                                         rel_likelihood=GPpref.PrefProbit(), abs_likelihood=GPpref.AbsBoundProbit())
 
 # Get initial solution
 learner.set_hyperparameters(log_hyp)
-f = learner.calc_laplace()
+f = learner.solve_laplace()
+
+if save_plots:
+    fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+                                                                    abs_y_samples, mc_samples)
+    fig_p.savefig(fig_dir+'posterior00.pdf', bbox_inches='tight')
 
 for obs_num in range(n_queries):
-    fuv = np.array([[0, 1]])
-    next_x = np.atleast_2d(learner.select_observation())
-    if next_x.shape[0] == 1:
-        next_y = beta_obs_function(next_x, sigma=rel_sigma)
+    next_x, next_uvi = learner.select_observation(req_improvement=0.55, gamma=2.0, n_comparators=4)
+    if next_uvi is None:
+        next_y, next_f = abs_obs_fun.generate_observations(next_x)
         learner.add_observations(next_x, next_y)
     else:
-        next_y, next_f = noisy_preference_rank(next_x.T)
-        fuv_train = np.concatenate((fuv_train, next_f), 0)
-        learner.add_observations(next_x, next_y, fuv)
+        next_y, next_f = rel_obs_fun.generate_observations(next_x[next_uvi][:,:,0])
+        fuv_rel = np.concatenate((fuv_rel, next_f), 0)
+        learner.add_observations(next_x, next_y, next_uvi)
     print next_x, next_y
-    f = learner.calc_laplace()
+    f = learner.solve_laplace()
+    if save_plots:
+        fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+                                                                        abs_y_samples, mc_samples)
+        fig_p.savefig(fig_dir+'posterior{0:02d}.pdf'.format(obs_num+1), bbox_inches='tight')
+        plt.close(fig_p)
 
-# Latent predictions
-fhat, vhat = learner.predict_latent(x_test)
+learner.print_hyperparameters()
 
-# Expected values
-E_y = learner.GP.abs_posterior_mean(x_test, fhat, vhat)
-
-# Sampling from posterior to show likelihoods
-mc_samples = np.random.normal(size=n_mcsamples)
-y_samples = np.linspace(0.01, 0.99, n_ysamples)
-p_y = learner.GP.abs_posterior_likelihood(y_samples, fhat=fhat, varhat=vhat, normal_samples=mc_samples)
-
-hf_input, ha_input =plt.subplot(1,1)
-
-
-hf, (hb, ha) = plt.subplots(1,2)
-hf, hpf = ptt.plot_with_bounds(ha, x_plot, y_plot, rel_sigma, c=ptt.lines[0])
-ha.imshow(p_y, origin='lower', extent=[x_plot[0], x_plot[-1], 0.01, 0.99])
-
-if learner.GP.x_train.shape[0]>0:
-    for uv,fuv,y in zip(learner.GP.x_train[learner.GP.uvi_train][:,:,0], fuv_train, learner.GP.y_train):
-        ha.plot(uv, fuv, 'b-', color=ptt.lighten(ptt.lines[0]))
-        ha.plot(uv[(y+1)/2],fuv[(y+1)/2],'+', color=ptt.darken(ptt.lines[0], 1.5))
-
-if learner.GP.x_abs_train.shape[0]>0:
-    ha.plot(learner.GP.x_abs_train, learner.GP.y_abs_train, 'k+')
-
-hfhat, hpfhat = ptt.plot_with_bounds(hb, x_test, fhat, np.sqrt(vhat), c=ptt.lines[1])
-hEy, = ha.plot(x_plot, E_y, color=ptt.lines[3])
-
-# ha.plot(x_plot, E_y2, color=ptt.lines[4])
-hmap, = ha.plot(x_plot, y_samples[np.argmax(p_y, axis=0)], color='w')
-ha.set_title('Training data')
-ha.set_ylabel('$y$')
-ha.set_xlabel('$x$')
-hb.set_xlabel('$x$')
-hb.set_ylabel('$f(x)$')
-
-ha.legend([hf, hEy, hmap], [r'$f(x)$', r'$E_{p(y|\mathcal{Y})}\left[y\right]$', r'$y_{MAP} | \mathcal{Y}$'])
-hb.legend([hfhat], [r'Latent function $\hat{f}(x)$'])
+if not save_plots:
+    fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+                                                                    abs_y_samples, mc_samples)
 
 plt.show()

@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
@@ -51,3 +52,72 @@ def plot_relative_likelihood(ax, p_y, extent):
     plt.clabel(h_pc, inline=1, fontsize=10)
     ax.get_figure().colorbar(h_p, ax=ax)
     return h_p
+
+
+def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
+               class_icons=['ko', 'wo'], marker_options={'mec':'k', 'mew':0.5}, *args, **kwargs):
+
+
+    # Plot true function, likelihoods and observations
+    fig, (ax_l, ax_a, ax_r) = plot_setup_2d(**kwargs)
+
+    # True latent
+    plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])
+
+    # True absolute likelihood
+    abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0], y_samples[-1, 0]]
+    h_pat = ax_a.imshow(p_a_y, origin='lower', extent=abs_extent)
+    if xa_train.shape[0] > 0:
+        ax_a.plot(xa_train, ya_train, 'w+')
+    h_yt, = ax_a.plot(xt, mu_t, c=lines[0])
+    ax_a.legend([h_yt], ['$E(y|f(x))$'])
+    fig.colorbar(h_pat, ax=ax_a)
+
+    # True relative likelihood
+    rel_y_extent = [xt[0, 0], xt[-1, 0], xt[0, 0], xt[-1, 0]]
+    h_prt = plot_relative_likelihood(ax_r, p_r_y, extent=rel_y_extent)
+    if xt.shape[0] > 0:
+        for uv, fuv, y in zip(uvr_train, fuvr_train, yr_train):
+            ax_r.plot(uv[0], uv[1], class_icons[(y[0] + 1) / 2], **marker_options)
+            ax_l.plot(uv, fuv, 'b-', color=lighten(lines[0]))
+            ax_l.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], class_icons[(y[0] + 1) / 2], **marker_options)
+    return fig, (ax_l, ax_a, ax_r)
+
+
+def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
+                   y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
+                   class_icons = ['ko', 'wo'], marker_options = {'mec':'k', 'mew':0.5}, *args, **kwargs):
+    fig, (ax_l, ax_a, ax_r) = plot_setup_2d(**kwargs)
+
+    # Latent function
+    hf, hpf = plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])
+
+    hf_hat, hpf_hat = plot_with_bounds(ax_l, xt, fhat, np.sqrt(np.atleast_2d(vhat.diagonal()).T), c=lines[1])
+    ax_l.legend([hf, hf_hat], [r'True latent function, $f(x)$', r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
+
+    # Absolute posterior likelihood
+    abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0], y_samples[-1, 0]]
+    h_pap = ax_a.imshow(p_a_y, origin='lower', extent=abs_extent)
+    h_yt, = ax_a.plot(xt, mu_t, c=lines[0])
+    hEy, = ax_a.plot(xt, E_y, color=lines[3])
+    if xa_train.shape[0] > 0:
+        ax_a.plot(xa_train, ya_train, 'w+')
+    ax_a.legend([h_yt, hEy],
+                  [r'True mean, $E_{p(y|f(x))}[y]$', r'Posterior mean, $E_{p(y|\mathcal{Y})}\left[y\right]$'])
+    fig.colorbar(h_pap, ax=ax_a)
+
+    # Relative posterior likelihood
+    rel_y_extent = [xt[0, 0], xt[-1, 0], xt[0, 0], xt[-1, 0]]
+    h_prp = plot_relative_likelihood(ax_r, p_r_y, extent=rel_y_extent)
+    if uvr_train.shape[0] > 0:
+        for uv, fuv, y in zip(uvr_train, fuvr_train, yr_train):
+            ax_r.plot(uv[0], uv[1], class_icons[(y[0] + 1) / 2], **marker_options)
+            ax_l.plot(uv, fuv, 'b-', color=lighten(lines[0]))
+            ax_l.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], class_icons[(y[0] + 1) / 2], **marker_options)
+
+    return fig, (ax_l, ax_a, ax_r)
+
+def ensure_dir(file_path):
+    directory = os.path.dirname(file_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
