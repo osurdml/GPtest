@@ -1,6 +1,41 @@
 import numpy as np
 
 
+class ObsObject(object):
+    def __init__(self, x_rel, uvi_rel, x_abs, y_rel, y_abs):
+        self.x_rel, self.uvi_rel, self.x_abs, self.y_rel, self.y_abs = x_rel, uvi_rel, x_abs, y_rel, y_abs
+
+
+class VariableWave(object):
+    def __init__(self, amp_range, f_range, off_range, damp_range, n_components=1):
+        self.amp_range = amp_range
+        self.f_range = f_range
+        self.off_range = off_range
+        self.damp_range = damp_range
+        self.n_components = n_components
+        self.randomize()
+
+    def out(self, x):
+        y = self.amplitude*np.cos(self.frequency * np.pi * (x-self.offset)) * np.exp(-self.damping*(x-self.offset)**2)
+        return y
+
+    def set_values(self, a, f, o, d):
+        self.amplitude = a
+        self.frequency = f
+        self.offset = o
+        self.damping = d
+
+    def randomize(self, print_vals=False):
+        self.amplitude = np.random.uniform(low=self.amp_range[0], high=self.amp_range[1]/self.n_components)
+        self.frequency = np.random.uniform(low=self.f_range[0], high=self.f_range[1])
+        self.offset = np.random.uniform(low=self.off_range[0], high=self.off_range[1])
+        self.damping = np.random.uniform(low=self.damp_range[0], high=self.damp_range[1])
+        if print_vals:
+            self.print_values()
+
+    def print_values(self):
+        print "a: {0:.2f}, f: {1:.2f}, o: {2:.2f}, d: {3:.2f}".format(self.amplitude, self.frequency, self.offset, self.damping)
+
 def damped_wave(x):
     y = np.cos(6 * np.pi * (x - 0.5)) * np.exp(-10 * (x - 0.5) ** 2)
     return y

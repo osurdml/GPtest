@@ -10,29 +10,35 @@ plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 np.random.seed(1)
 
-train_hyper = False
-use_test_data = True
+train_hyper = True
+use_test_data = False
 verbose = True
 
 #log_hyp = np.log([0.2, 0.5, 0.1, 1.0, 10.0]) # length_scale/s, sigma_f, sigma_n_abs, sigma_beta, v_beta
 # log_hyp = np.log([0.07, 1.0, 0.25, 1.0, 28.1])
-log_hyp = np.log([0.065, 0.8, 0.8, 0.8, 20.0])
+# log_hyp = np.log([0.065, 0.8, 0.8, 0.8, 20.0])
+log_hyp = np.log([0.05, 1.5, 0.09, 2.0, 50.0])
 np.random.seed(0)
 
-n_rel_train = 3
-n_abs_train = 1
-rel_sigma = 0.2
+n_rel_train = 30
+n_abs_train = 30
+rel_sigma = 0.02
 delta_f = 1e-5
 
 beta_sigma = 0.8
-beta_v = 20.0
+beta_v = 100.0
 
 n_xplot = 101
 n_mcsamples = 1000
 n_ysamples = 101
 
 # Define polynomial function to be modelled
-true_function = test_data.zero_fun
+#true_function = test_data.zero_fun
+random_wave = test_data.VariableWave([0.6, 1.2], [5.0, 10.0], [0.0, 1.0], [10.0, 20.0])
+random_wave.randomize()
+random_wave.set_values(a=1.2, f=6.0, o=.2, d=20.0)
+true_function = random_wave.out
+random_wave.print_values()
 
 rel_obs_fun = GPpref.RelObservationSampler(true_function, GPpref.PrefProbit(sigma=rel_sigma))
 abs_obs_fun = GPpref.AbsObservationSampler(true_function, GPpref.AbsBoundProbit(sigma=beta_sigma, v=beta_v))

@@ -14,7 +14,7 @@ def std_norm_pdf(x):
     #return np.exp(-(x**2)/2)/_sqrt_2pi
 
 def std_norm_cdf(x):
-    #x = np.clip(x, -30, 100 )
+    x = np.clip(x, -30, 100 )
     return norm.cdf(x)
 
 def norm_pdf_norm_cdf_ratio(z):
@@ -132,7 +132,7 @@ class PrefProbit(object):
         return np.log(self.likelihood(y, f))
 
     def posterior_likelihood(self, fhat, varhat, uvi, y=1): # This is the likelihood assuming a Gaussian over f
-        var_star = 2*self.sigma**2 + np.atleast_2d([varhat[u, u] + varhat[v, v] - varhat[u, v] - varhat[v, v] for u,v in uvi]).T
+        var_star = 2*self.sigma**2 + np.atleast_2d([varhat[u, u] + varhat[v, v] - varhat[u, v] - varhat[v, u] for u,v in uvi]).T
         p_y = self.likelihood(y, self.get_rel_f(fhat, uvi), 1.0/np.sqrt(var_star))
         return p_y
 
@@ -353,8 +353,8 @@ class PreferenceGaussianProcess(object):
 
         return f#, lml
 
-    def _safe_invert_noise(self, mat):
-        eps = 1.0e-6
+    def _safe_invert_noise(self, mat, start_noise=1.0e-6):
+        eps = start_noise
         inv_ok = False
 
         while not inv_ok:
@@ -384,8 +384,10 @@ class PreferenceGaussianProcess(object):
         kt = self.kern.K(self.x_train_all, x)
         mean_latent = np.matmul(kt.T, self.iKf)
         Ktt = self.kern.K(x)
-        # iKW, _ = self._safe_invert_noise(self.KWI)
-        iKW = np.linalg.inv(self.KWI)
+        try:
+            iKW = np.linalg.inv(self.KWI)
+        except np.linalg.linalg.LinAlgError:
+            raise
         var_latent = Ktt - np.matmul(kt.T, np.matmul(iKW, np.matmul(self.W, kt)))
         return mean_latent, var_latent
 
@@ -462,6 +464,13 @@ class ObservationSampler(object):
             x_test = x_test * np.diff(domain, axis=0) + domain[0, :]
         return x_test
 
+    def cheat_multi_sampler(self, x):
+        fx = np.random.normal(loc=self.f(x), scale=self.l.sigma)
+        max_xi = np.argmax(fx)
+        other_xi = np.delete(np.arange(x.shape[0]), max_xi)
+        y = np.ones((x.shape[0]-1, 1), dtype='int')
+        uvi = np.hstack((np.atleast_2d(other_xi).T, max_xi*y))
+        return y, uvi, fx
 
 class AbsObservationSampler(ObservationSampler):
     def observation_likelihood_array(self, x, y):

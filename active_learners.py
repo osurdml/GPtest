@@ -3,8 +3,14 @@ import GPpref
 from scipy.stats import beta
 import plot_tools as ptt
 
-def calc_ucb(fhat, vhat, gamma=2.0):
-    return fhat + gamma * np.sqrt(np.atleast_2d(vhat.diagonal()).T)
+
+def calc_ucb(fhat, vhat, gamma=2.0, sigma_offset=0.0):
+    return fhat + gamma * (np.sqrt(np.atleast_2d(vhat.diagonal()).T) - sigma_offset)
+
+def softmax_selector(x, tau=1.0):
+    ex = np.exp((x - x.max())/tau)
+    Px = ex/ex.sum()
+    return np.random.choice(len(x), p=Px)
 
 class ActiveLearner(GPpref.PreferenceGaussianProcess):
     def init_extras(self):
@@ -24,11 +30,10 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
     def get_observations(self):
         return self.x_rel, self.uvi_rel, self.x_abs, self.y_rel, self.y_abs
 
-    def select_observation(self, domain=None):
-        if np.random.uniform() < 0.5:
-            return self.uniform_domain_sampler(1, domain), None
-        else:
-            return self.uniform_domain_sampler(2, domain), np.array([[0, 1]])
+    def select_observation(self, p_rel=0.5, domain=None, n_rel_samples=2):
+        if np.random.uniform() > p_rel: # i.e choose an absolute sample
+            n_rel_samples = 1
+        return self.uniform_domain_sampler(n_rel_samples, domain)
 
     def uniform_domain_sampler(self, n_samples, domain=None):
         # Domain should be 2 x n_xdim, i.e [[x0_lo, x1_lo, ... , xn_lo], [x0_hi, x1_hi, ... , xn_hi ]]
@@ -62,19 +67,48 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
 
 class UCBLatent(ActiveLearner):
     # All absolute returns
-    def select_observation(self, domain=None, ntest=100, gamma=2.0):
-        x_test = self.uniform_domain_sampler(ntest, domain)
+    def select_observation(self, domain=None, n_test=100, gamma=2.0):
+        x_test = self.uniform_domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         ucb = calc_ucb(fhat, vhat, gamma)
-        return x_test[np.argmax(ucb), :], None
+        return x_test[[np.argmax(ucb)], :]
 
 class UCBOut(ActiveLearner):
-    def select_observation(self, domain=None, ntest=100, gamma=2.0):
+    def select_observation(self, domain=None, n_test=100, gamma=2.0):
         # Don't know how to recover the second moment of the predictive distribution, so this isn't done
-        x_test = self.uniform_domain_sampler(ntest, domain)
+        x_test = self.uniform_domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         Ey = self.expected_y(x_test, fhat, vhat)
-        return x_test[np.argmax(Ey), :], None
+        return x_test[[np.argmax(Ey)], :]
+
+class ABSThresh(ActiveLearner):
+    def select_observation(self, domain=None, n_test=100, p_thresh=0.7):
+        x_test = self.uniform_domain_sampler(n_test, domain)
+        fhat, vhat = self.predict_latent(x_test)
+        aa, bb = self.abs_likelihood.get_alpha_beta(fhat)
+        p_under_thresh = beta.cdf(p_thresh, aa, bb)
+        # ucb = calc_ucb(fhat, vhat, gamma)
+        return x_test[[np.argmax(p_under_thresh * (1.0 - p_under_thresh))], :]
+
+class UCBAbsRel(ActiveLearner):
+    def select_observation(self, domain=None, n_test=100, p_rel=0.5, n_rel_samples=2, gamma=2.0, tau=5.0):
+        x_test = self.uniform_domain_sampler(n_test, domain)
+        fhat, vhat = self.predict_latent(x_test)
+        ucb = calc_ucb(fhat, vhat, gamma).flatten()
+
+        if np.random.uniform() < p_rel: # i.e choose a relative sample
+            best_n = [softmax_selector(ucb, tau=tau)]   #[np.argmax(ucb)]  #
+            # p_rel_y = self.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
+            sq_dist = GPpref.squared_distance(x_test, x_test)
+            while len(best_n) < n_rel_samples:
+                # ucb = ucb*sq_dist[best_n[-1], :] # Discount ucb by distance
+                ucb[best_n[-1]] = 0.0
+                # ucb /= p_rel_y[best_n[-1],:] # Divide by likelihood that each point is better than previous best
+                best_n.append(softmax_selector(ucb, tau=tau*5.0))
+                # best_n.append(np.argmax(ucb))
+        else:
+            best_n = [np.argmax(ucb)]  # [softmax_selector(ucb, tau=tau)]   #
+        return x_test[best_n, :]
 
 class PeakComparitor(ActiveLearner):
 
@@ -96,7 +130,8 @@ class PeakComparitor(ActiveLearner):
         except AttributeError:
             print "reset_observations failed: existing observations not found"
 
-    def select_observation(self, domain=None, n_test=50, gamma=2.0, n_comparators=1):
+    def select_observation(self, domain=None, n_test=50, gamma=2.0, n_rel_samples=2):
+        n_comparators = n_rel_samples-1
         x_test = self.uniform_domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         ucb = calc_ucb(fhat, vhat, gamma)
@@ -113,21 +148,20 @@ class PeakComparitor(ActiveLearner):
         for i,uvi1 in enumerate(other_xi):
             x[1] = x_test[uvi1]
             V[i] += p_pref[i]*self.test_observation(x, self._minus_y_obs, x_test, gamma)
-            V[i] += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, x_test, gamma)
+            if (1 - p_pref[i]) > 1e-3:
+                V[i] += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, x_test, gamma)
 
         best_n = np.argpartition(V, -n_comparators)[-n_comparators:]
         # best = np.argmax(V)
         cVmax = np.argmax(ucb)  # This is repeated in case I want to change max_xi
 
         if ucb[cVmax] > V.max():
-            return x_test[[cVmax], :], None
+            return x_test[[cVmax], :]
         else:
             xi = np.zeros(n_comparators+1, dtype='int')
             xi[0] = max_xi
-            xi[1:] = best_n
-            uvi_out = np.zeros(shape=(n_comparators, 2), dtype='int')
-            uvi_out[:, 1] = np.arange(start=1, stop=n_comparators+1, dtype='int')
-            return x_test[xi,:], uvi_out
+            xi[1:] = other_xi[best_n]
+            return x_test[xi, :]
 
 
 class LikelihoodImprovement(PeakComparitor):
@@ -142,7 +176,8 @@ class LikelihoodImprovement(PeakComparitor):
         self.reset_observations()
         return p_new_is_better
 
-    def select_observation(self, domain=None, n_test=50, req_improvement=0.6, n_comparators=1, gamma=1.5):
+    def select_observation(self, domain=None, n_test=50, req_improvement=0.6, n_rel_samples=2, gamma=1.5, p_thresh=0.7):
+        n_comparators = n_rel_samples-1
         x_test = self.uniform_domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         max_xi = np.argmax(fhat)
@@ -159,21 +194,29 @@ class LikelihoodImprovement(PeakComparitor):
         for i,uvi1 in enumerate(other_xi):
             x[1] = x_test[uvi1]
             V[i] += p_pref[i]*self.test_observation(x, self._minus_y_obs, x_test, max_xi)
-            V[i] += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, x_test, max_xi)
+            if (1-p_pref[i]) > 1e-3:
+                V[i] += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, x_test, max_xi)
 
-        best_n = np.argpartition(V, -n_comparators)[-n_comparators:]
+        Vmax = V.max()
+        # best_n = np.argpartition(V, -n_comparators)[-n_comparators:]
         # best = np.argmax(V)
-        print 'V_max = {0}'.format(V.max())
+        print 'V_max = {0}'.format(Vmax)
 
-        if V.max() < req_improvement:
-            ucb = calc_ucb(fhat, vhat, gamma)
-            return x_test[[np.argmax(ucb)], :], None
+        if Vmax < req_improvement:
+            # aa, bb = self.abs_likelihood.get_alpha_beta(fhat)
+            # p_under_thresh = beta.cdf(p_thresh, aa, bb)
+            # return x_test[[np.argmax(p_under_thresh*(1.0-p_under_thresh))], :]
+            ucb = calc_ucb(fhat, vhat, gamma, self.rel_likelihood.sigma)
+            return x_test[[np.argmax(ucb)], :]
         else:
+            best_n = []
+            while len(best_n) < n_comparators:
+                cbest = np.argmax(V)
+                best_n.append(cbest)
+                V = V * np.sqrt(GPpref.squared_distance(x_test[[other_xi[cbest]], :], x_test[other_xi])[0])
             xi = np.zeros(n_comparators+1, dtype='int')
             xi[0] = max_xi
-            xi[1:] = best_n
-            uvi_out = np.zeros(shape=(n_comparators, 2), dtype='int')
-            uvi_out[:, 1] = np.arange(start=1, stop=n_comparators+1, dtype='int')
-            return x_test[xi,:], uvi_out
+            xi[1:] = other_xi[best_n]
+            return x_test[xi, :]
 
 
