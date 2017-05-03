@@ -6,6 +6,7 @@ import GPpref
 import plot_tools as ptt
 import active_learners
 import test_data
+from matplotlib.backends.backend_pdf import PdfPages
 
 nowstr = time.strftime("%Y_%m_%d-%H_%M")
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
@@ -15,16 +16,17 @@ save_plots = True
 
 # log_hyp = np.log([0.1,0.5,0.1,10.0]) # length_scale, sigma_f, sigma_probit, v_beta
 # log_hyp = np.log([0.07, 0.75, 0.25, 1.0, 28.1])
-log_hyp = np.log([0.05, 1.5, 0.09, 2.0, 50.0])
-np.random.seed(0)
+# log_hyp = np.log([0.05, 1.5, 0.09, 2.0, 50.0])
+log_hyp = np.log([0.02, 0.6, 0.2, 0.8, 60.0])
+np.random.seed(2)
 
 n_rel_train = 1
 n_abs_train = 1
-rel_sigma = 0.02
+rel_sigma = 0.05
 delta_f = 1e-5
 
 beta_sigma = 0.8
-beta_v = 100.0
+beta_v = 80.0
 
 n_xplot = 101
 n_mcsamples = 1000
@@ -34,9 +36,11 @@ n_queries = 20
 
 # Define polynomial function to be modelled
 # true_function = test_data.multi_peak
-random_wave = test_data.VariableWave([0.6, 1.0], [5.0, 10.0], [0.0, 1.0], [10.0, 20.0])
+# random_wave = test_data.VariableWave([0.6, 1.0], [5.0, 10.0], [0.0, 1.0], [10.0, 20.0])
+random_wave = test_data.MultiWave(amp_range=[0.6, 1.2], f_range=[10.0, 30.0], off_range=[0.1, 0.9],
+                                     damp_range=[250.0, 350.0], n_components=3)
 random_wave.randomize()
-random_wave.set_values(1.0, 6.00, 0.2, 10.50)
+# random_wave.set_values(1.0, 6.00, 0.2, 10.50)
 true_function = random_wave.out
 random_wave.print_values()
 
@@ -45,6 +49,7 @@ if save_plots:
     fig_dir = 'fig/' + nowstr + '/'
     ptt.ensure_dir(fig_dir)
     print "Figures will be saved to: {0}".format(fig_dir)
+    pdf_pages = PdfPages(fig_dir+'posterior_all.pdf')
 
 rel_obs_fun = GPpref.RelObservationSampler(true_function, GPpref.PrefProbit(sigma=rel_sigma))
 abs_obs_fun = GPpref.AbsObservationSampler(true_function, GPpref.AbsBoundProbit(sigma=beta_sigma, v=beta_v))
@@ -84,7 +89,8 @@ f = learner.solve_laplace()
 if save_plots:
     fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
                                                                     abs_y_samples, mc_samples)
-    fig_p.savefig(fig_dir+'posterior00.pdf', bbox_inches='tight')
+    pdf_pages.savefig(fig_p, bbox_inches='tight')
+    # fig_p.savefig(fig_dir+'posterior00.pdf', bbox_inches='tight')
 
 for obs_num in range(n_queries):
     next_x = learner.select_observation(**obs_arguments)
@@ -103,7 +109,8 @@ for obs_num in range(n_queries):
     if save_plots:
         fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
                                                                         abs_y_samples, mc_samples)
-        fig_p.savefig(fig_dir+'posterior{0:02d}.pdf'.format(obs_num+1), bbox_inches='tight')
+        pdf_pages.savefig(fig_p, bbox_inches='tight')
+        # fig_p.savefig(fig_dir+'posterior{0:02d}.pdf'.format(obs_num+1), bbox_inches='tight')
         plt.close(fig_p)
 
 learner.print_hyperparameters()
@@ -111,5 +118,7 @@ learner.print_hyperparameters()
 if not save_plots:
     fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
                                                                     abs_y_samples, mc_samples)
+else:
+    pdf_pages.close()
 
 plt.show()

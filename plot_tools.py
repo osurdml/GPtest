@@ -22,6 +22,21 @@ def plot_with_bounds(ax, x, y, s, c=lines[0]):
     ax.set_ylim(bottom = min(clim[0],xy[:,1].min()), top = max(clim[1], xy[:,1].max()))
     return h_fx, h_patch
 
+def plot_setup_rel(t_l = r'Latent function, $f(x)$', t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$'):
+
+    fig, (ax_l, ax_r) = plt.subplots(1, 2)
+    fig.set_size_inches(9.8, 3.5)
+
+    # Latent function
+    ax_l.set_title(t_l)
+    ax_l.set_xlabel('$x$')
+    ax_l.set_ylabel('$f(x)$')
+
+    # Relative likelihood
+    ax_r.set_title(t_r)
+    ax_r.set_xlabel('$x_0$')
+    ax_r.set_ylabel('$x_1$')
+    return fig, (ax_l, ax_r)
 
 def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(y | f(x))$',
                   t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$'):
@@ -84,6 +99,28 @@ def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train, ya_tr
     return fig, (ax_l, ax_a, ax_r)
 
 
+def true_plots_rel(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
+               class_icons=['ko', 'wo'], marker_options={'mec':'k', 'mew':0.5}, *args, **kwargs):
+
+    # Plot true function, likelihoods and observations
+    fig, (ax_l, ax_r) = plot_setup_rel(**kwargs)
+
+    # True latent
+    plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])
+
+    # True absolute likelihood
+
+    # True relative likelihood
+    rel_y_extent = [xt[0, 0], xt[-1, 0], xt[0, 0], xt[-1, 0]]
+    h_prt = plot_relative_likelihood(ax_r, p_r_y, extent=rel_y_extent)
+    if xt.shape[0] > 0:
+        for uv, fuv, y in zip(uvr_train, fuvr_train, yr_train):
+            ax_r.plot(uv[0], uv[1], class_icons[(y[0] + 1) / 2], **marker_options)
+            ax_l.plot(uv, fuv, 'b-', color=lighten(lines[0]))
+            ax_l.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], class_icons[(y[0] + 1) / 2], **marker_options)
+    return fig, (ax_l, ax_r)
+
+
 def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
                    y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
                    class_icons = ['ko', 'wo'], marker_options = {'mec':'k', 'mew':0.5}, *args, **kwargs):
@@ -116,6 +153,31 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
             ax_l.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], class_icons[(y[0] + 1) / 2], **marker_options)
 
     return fig, (ax_l, ax_a, ax_r)
+
+def estimate_plots_rel(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
+                   y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
+                   class_icons = ['ko', 'wo'], marker_options = {'mec':'k', 'mew':0.5}, *args, **kwargs):
+    fig, (ax_l, ax_r) = plot_setup_rel(**kwargs)
+
+    # Latent function
+    hf, hpf = plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])
+
+    hf_hat, hpf_hat = plot_with_bounds(ax_l, xt, fhat, np.sqrt(np.atleast_2d(vhat.diagonal()).T), c=lines[1])
+    ax_l.legend([hf, hf_hat], [r'True latent function, $f(x)$', r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
+
+    # Absolute posterior likelihood
+    abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0], y_samples[-1, 0]]
+
+    # Relative posterior likelihood
+    rel_y_extent = [xt[0, 0], xt[-1, 0], xt[0, 0], xt[-1, 0]]
+    h_prp = plot_relative_likelihood(ax_r, p_r_y, extent=rel_y_extent)
+    if uvr_train.shape[0] > 0:
+        for uv, fuv, y in zip(uvr_train, fuvr_train, yr_train):
+            ax_r.plot(uv[0], uv[1], class_icons[(y[0] + 1) / 2], **marker_options)
+            ax_l.plot(uv, fuv, 'b-', color=lighten(lines[0]))
+            ax_l.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], class_icons[(y[0] + 1) / 2], **marker_options)
+
+    return fig, (ax_l, ax_r)
 
 def ensure_dir(file_path):
     directory = os.path.dirname(file_path)

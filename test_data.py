@@ -36,6 +36,25 @@ class VariableWave(object):
     def print_values(self):
         print "a: {0:.2f}, f: {1:.2f}, o: {2:.2f}, d: {3:.2f}".format(self.amplitude, self.frequency, self.offset, self.damping)
 
+
+class MultiWave(VariableWave):
+    def out(self, x):
+        y = np.zeros(np.array(x).shape)
+        for a, f, o, d in zip(self.amplitude, self.frequency, self.offset, self.damping):
+            y += a*np.cos(f*np.pi*(x-o)) * np.exp(-d*(x-o)**2)
+        return y
+
+    def randomize(self, print_vals=False):
+        self.amplitude = np.random.uniform(low=self.amp_range[0], high=self.amp_range[1], size=self.n_components)
+        self.frequency = np.random.uniform(low=self.f_range[0], high=self.f_range[1], size=self.n_components)
+        self.offset = np.random.uniform(low=self.off_range[0], high=self.off_range[1], size=self.n_components)
+        self.damping = np.random.uniform(low=self.damp_range[0], high=self.damp_range[1], size=self.n_components)
+        if print_vals:
+            self.print_values()
+
+    def print_values(self):
+        print "a: {0}, f: {1}, o: {2}, d: {3}".format(self.amplitude, self.frequency, self.offset, self.damping)
+
 def damped_wave(x):
     y = np.cos(6 * np.pi * (x - 0.5)) * np.exp(-10 * (x - 0.5) ** 2)
     return y

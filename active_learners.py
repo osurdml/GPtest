@@ -74,6 +74,7 @@ class UCBLatent(ActiveLearner):
         return x_test[[np.argmax(ucb)], :]
 
 class UCBOut(ActiveLearner):
+    # NOT FULLY IMPLEMENTED - BROKEN
     def select_observation(self, domain=None, n_test=100, gamma=2.0):
         # Don't know how to recover the second moment of the predictive distribution, so this isn't done
         x_test = self.uniform_domain_sampler(n_test, domain)

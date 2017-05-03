@@ -29,16 +29,17 @@ plt.rc('text', usetex=True)
 
 # log_hyp = np.log([0.1,0.5,0.1,10.0]) # length_scale, sigma_f, sigma_probit, v_beta
 # log_hyp = np.log([0.07, 0.75, 0.25, 1.0, 28.1])
-log_hyp = np.log([0.05, 1.5, 0.09, 2.0, 50.0])
+# log_hyp = np.log([0.05, 1.5, 0.09, 2.0, 50.0])
+log_hyp = np.log([0.02, 0.6, 0.2, 0.8, 60.0])
 np.random.seed(10)
 
 n_rel_train = 1
 n_abs_train = 0
-rel_sigma = 0.02
+rel_sigma = 0.05
 delta_f = 1e-5
 
 beta_sigma = 0.8
-beta_v = 100.0
+beta_v = 80.0
 
 n_xtest = 101
 n_best_points = 15
@@ -51,7 +52,9 @@ n_rel_samples = 5
 n_queries = 20
 
 # Define polynomial function to be modelled
-random_wave = test_data.VariableWave([0.6, 1.0], [5.0, 10.0], [0.0, 1.0], [10.0, 20.0])
+# random_wave = test_data.VariableWave([0.6, 1.0], [5.0, 10.0], [0.0, 1.0], [10.0, 20.0])
+random_wave = test_data.MultiWave(amp_range=[0.6, 1.2], f_range=[10.0, 30.0], off_range=[0.1, 0.9],
+                                     damp_range=[250.0, 350.0], n_components=3)
 
 nowstr = time.strftime("%Y_%m_%d-%H_%M")
 data_dir = 'data/' + nowstr + '/'
@@ -139,7 +142,7 @@ for trial_number in range(n_trials):
         print wrms_results[:, obs_num+1, trial_number]
     for nl, learner in enumerate(learners):
         obs_tuple = learner.model.get_observations()
-        obs_array[nl]['obs'].append(ObsObject(*obs_tuple))
+        obs_array[nl]['obs'].append(test_data.ObsObject(*obs_tuple))
 
 with open(data_dir+'wrms.pkl', 'wb') as fh:
     pickle.dump(wrms_results, fh)

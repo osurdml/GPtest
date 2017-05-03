@@ -219,7 +219,7 @@ class AbsBoundProbit(object):
 
 class PreferenceGaussianProcess(object):
 
-    def __init__(self, x_rel, uvi_rel, x_abs, y_rel, y_abs, rel_likelihood=PrefProbit(), delta_f = 1e-6,
+    def __init__(self, x_rel, uvi_rel, x_abs, y_rel, y_abs, rel_likelihood=PrefProbit(), delta_f=1e-6,
                  abs_likelihood=AbsBoundProbit(), verbose=False):
         # log_hyp are log of hyperparameters, note that it is [length_0, ..., length_d, sigma_f, sigma_probit, v_beta]
         # Training points are split into relative and absolute for calculating f, but combined for predictions.  
