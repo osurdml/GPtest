@@ -111,6 +111,26 @@ class UCBAbsRel(ActiveLearner):
             best_n = [np.argmax(ucb)]  # [softmax_selector(ucb, tau=tau)]   #
         return x_test[best_n, :]
 
+class UCBAbsRelD(ActiveLearner):
+    def select_observation(self, domain=None, n_test=100, p_rel=0.5, n_rel_samples=2, gamma=2.0, tau=5.0):
+        x_test = self.uniform_domain_sampler(n_test, domain)
+        fhat, vhat = self.predict_latent(x_test)
+        ucb = calc_ucb(fhat, vhat, gamma).flatten()
+
+        if np.random.uniform() < p_rel: # i.e choose a relative sample
+            best_n = [softmax_selector(ucb, tau=tau)]   #[np.argmax(ucb)]  #
+            p_rel_y = self.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
+            # sq_dist = GPpref.squared_distance(x_test, x_test)
+            while len(best_n) < n_rel_samples:
+                # ucb = ucb*sq_dist[best_n[-1], :] # Discount ucb by distance
+                ucb[best_n[-1]] = 0.0
+                ucb *= 2*p_rel_y[best_n[-1],:]*(1.0 - p_rel_y[best_n[-1],:]) # Divide by likelihood that each point is better than previous best
+                best_n.append(softmax_selector(ucb, tau=tau*5.0))
+                # best_n.append(np.argmax(ucb))
+        else:
+            best_n = [np.argmax(ucb)]  # [softmax_selector(ucb, tau=tau)]   #
+        return x_test[best_n, :]
+
 class PeakComparitor(ActiveLearner):
 
     def test_observation(self, x, y, x_test, gamma):

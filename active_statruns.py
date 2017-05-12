@@ -4,9 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import GPpref
 import plot_tools as ptt
-from active_learners import ActiveLearner, UCBLatent, PeakComparitor, LikelihoodImprovement, ABSThresh, UCBAbsRel
+from active_learners import ActiveLearner, UCBLatent, PeakComparitor, LikelihoodImprovement, ABSThresh, UCBAbsRel, UCBAbsRelD
 import test_data
 import pickle
+import plot_statruns
 
 class Learner(object):
     def __init__(self, model_type, obs_arguments):
@@ -24,8 +25,6 @@ def wrms(y_true, y_est, weight=True):
     return np.sqrt(np.mean(((y_true - y_est)*w)**2))
 
 nowstr = time.strftime("%Y_%m_%d-%H_%M")
-plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
-plt.rc('text', usetex=True)
 
 # log_hyp = np.log([0.1,0.5,0.1,10.0]) # length_scale, sigma_f, sigma_probit, v_beta
 # log_hyp = np.log([0.07, 0.75, 0.25, 1.0, 28.1])
@@ -71,12 +70,13 @@ learners = [Learner(ActiveLearner, {'p_rel': 0.5, 'n_rel_samples': n_rel_samples
             Learner(ActiveLearner, {'p_rel': 1.0, 'n_rel_samples': n_rel_samples}),  # 'Random (rel)',
             Learner(ActiveLearner, {'p_rel': 0.0, 'n_rel_samples': n_rel_samples}),  # 'Random (abs)',
             Learner(UCBLatent, {'gamma': 2.0, 'n_test': 100}),  # 'UCBLatent'
-            Learner(UCBAbsRel, { 'n_test': 100, 'p_rel': 0.5, 'n_rel_samples': n_rel_samples, 'gamma': 2.0, 'tau':5.0}),  # 'UCBCombined',
+            Learner(UCBAbsRel, { 'n_test': 100, 'p_rel': 1.0, 'n_rel_samples': n_rel_samples, 'gamma': 2.0, 'tau':5.0}),  # 'UCBCombined',
+            Learner(UCBAbsRelD, { 'n_test': 100, 'p_rel': 1.0, 'n_rel_samples': n_rel_samples, 'gamma': 2.0, 'tau':5.0}),
             # Learner(ABSThresh, {'n_test': 100, 'p_thresh': 0.7}),  # 'ABSThresh'
             # Learner(PeakComparitor, {'gamma': 2.0, 'n_test': 50, 'n_rel_samples': n_rel_samples}),  #  'PeakComparitor'
             # Learner(LikelihoodImprovement, {'req_improvement': 0.60, 'n_test': 50, 'gamma': 2.0, 'n_rel_samples': n_rel_samples, 'p_thresh': 0.7})  #  'LikelihoodImprovement'
             ]
-names = ['Random (rel and abs)', 'Random (rel)', 'Random (abs)', 'UCBLatent (abs)', 'UCBCombined (rel and abs)']
+names = ['Random (rel and abs)', 'Random (rel)', 'Random (abs)', 'UCB (abs)', 'UCBC (rel and abs)', 'UCBD (rel and abs)']
 n_learners = len(learners)
 
 obs_array = [{'name': name, 'obs': []} for name in names]
@@ -156,16 +156,4 @@ with open(data_dir+'selected_error.pkl', 'wb') as fh:
 with open(data_dir+'obs.pkl', 'wb') as fh:
     pickle.dump(obs_array, fh)
 
-f0, ax0 = plt.subplots()
-hl = ax0.plot(np.arange(n_queries+1), np.mean(wrms_results, axis=2).T)
-f0.legend(hl, names)
-
-f1, ax1 = plt.subplots()
-hl1 = ax1.plot(np.arange(n_queries+1), np.mean(true_pos_results, axis=2).T)
-f1.legend(hl1, names)
-
-f2, ax2 = plt.subplots()
-hl2 = ax2.plot(np.arange(n_queries+1), np.mean(selected_error, axis=2).T)
-f2.legend(hl2, names)
-
-plt.show()
+plot_statruns.plot_results(wrms_results, true_pos_results, selected_error, obs_array, data_dir=data_dir, bars=True, norm_comparator=0)

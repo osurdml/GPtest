@@ -55,6 +55,27 @@ class MultiWave(VariableWave):
     def print_values(self):
         print "a: {0}, f: {1}, o: {2}, d: {3}".format(self.amplitude, self.frequency, self.offset, self.damping)
 
+
+class DoubleMultiWave(object):
+    def __init__(self, amp_range, f_range, off_range, damp_range, n_components=2):
+        self.f_low = MultiWave(amp_range[0:2], f_range[0:2], off_range[0:2], damp_range[0:2], n_components=1)
+        self.f_high = MultiWave(amp_range[2:4], f_range[2:4], off_range[2:4], damp_range[2:4], n_components=n_components-1)
+        self.randomize()
+
+    def out(self, x):
+        return self.f_low.out(x)+self.f_high.out(x)
+
+    def randomize(self, print_vals=False):
+        self.f_low.randomize()
+        self.f_high.randomize()
+        if print_vals:
+            self.print_values()
+
+    def print_values(self):
+        self.f_low.print_values()
+        self.f_high.print_values()
+
+
 def damped_wave(x):
     y = np.cos(6 * np.pi * (x - 0.5)) * np.exp(-10 * (x - 0.5) ** 2)
     return y

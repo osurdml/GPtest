@@ -38,7 +38,7 @@ def plot_setup_rel(t_l = r'Latent function, $f(x)$', t_r = r'Relative likelihood
     ax_r.set_ylabel('$x_1$')
     return fig, (ax_l, ax_r)
 
-def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(y | f(x))$',
+def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(u | f(x))$',
                   t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$'):
 
     fig, (ax_l, ax_a, ax_r) = plt.subplots(1, 3)
@@ -52,7 +52,7 @@ def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood,
     # Absolute likelihood
     ax_a.set_title(t_a)
     ax_a.set_xlabel('$x$')
-    ax_a.set_ylabel('$y$')
+    ax_a.set_ylabel('$u$')
 
     # Relative likelihood
     ax_r.set_title(t_r)
@@ -85,7 +85,7 @@ def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train, ya_tr
     if xa_train.shape[0] > 0:
         ax_a.plot(xa_train, ya_train, 'w+')
     h_yt, = ax_a.plot(xt, mu_t, c=lines[0])
-    ax_a.legend([h_yt], ['$E(y|f(x))$'])
+    ax_a.legend([h_yt], ['$E[u]$'])
     fig.colorbar(h_pat, ax=ax_a)
 
     # True relative likelihood
@@ -140,7 +140,7 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     if xa_train.shape[0] > 0:
         ax_a.plot(xa_train, ya_train, 'w+')
     ax_a.legend([h_yt, hEy],
-                  [r'True mean, $E_{p(y|f(x))}[y]$', r'Posterior mean, $E_{p(y|\mathcal{Y})}\left[y\right]$'])
+                  [r'True mean, $E[u]$', r'Posterior mean, $E_{p(u|\mathcal{Y})}\left[u\right]$'])
     fig.colorbar(h_pap, ax=ax_a)
 
     # Relative posterior likelihood

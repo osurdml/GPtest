@@ -8,17 +8,18 @@ import test_data
 # from scipy.stats import beta
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
-np.random.seed(0)
+np.random.seed(1)
 
 train_hyper = False
 use_test_data = False
 verbose = True
 
-#log_hyp = np.log([0.2, 0.5, 0.1, 1.0, 10.0]) # length_scale/s, sigma_f, sigma_n_abs, sigma_beta, v_beta
+#log_hyp = np.log([0.2, 0.5, 0.1, 1.0, 10.0]) # length_scale/s, sigma_f, sigma_n_rel, sigma_beta, v_beta
 # log_hyp = np.log([0.07, 1.0, 0.25, 1.0, 28.1])
 # log_hyp = np.log([0.065, 0.8, 0.8, 0.8, 20.0])
 # log_hyp = np.log([0.05, 1.5, 0.09, 2.0, 50.0])
-log_hyp = np.log([0.02, 0.6, 0.2, 0.8, 60.0])
+# log_hyp = np.log([0.02, 0.6, 0.2, 0.8, 60.0])
+log_hyp = np.log([0.02, 0.6, 0.1, 1.2, 60.0])
 
 n_rel_train = 100
 n_abs_train = 100
@@ -26,7 +27,7 @@ n_abs_train = 100
 rel_sigma = 0.05
 delta_f = 1e-5
 
-beta_sigma = 0.8
+beta_sigma = 0.5
 beta_v = 80.0
 
 n_xplot = 101
@@ -41,8 +42,10 @@ n_ysamples = 101
 # #random_wave.set_values(a=1.2, f=6.0, o=.2, d=20.0)
 # random_wave.print_values()
 
-random_wave = test_data.MultiWave(amp_range=[0.6, 1.2], f_range=[10.0, 30.0], off_range=[0.1, 0.9],
-                                     damp_range=[250.0, 350.0], n_components=3)
+# # random_wave = test_data.MultiWave(amp_range=[0.6, 1.2], f_range=[10.0, 30.0], off_range=[0.1, 0.9],
+#                                      damp_range=[250.0, 350.0], n_components=3)
+random_wave = test_data.DoubleMultiWave(amp_range=[0.0, 0.4, 0.6, 1.2], f_range=[0.1, 2.0, 10.0, 30.0], off_range=[0.0, 1.0, 0.1, 0.9],
+                                     damp_range=[0.0, 50.0, 250.0, 350.0], n_components=3)
 random_wave.print_values()
 true_function = random_wave.out
 
@@ -106,7 +109,7 @@ fig_p, (ax_p_l, ax_p_a, ax_p_r) = \
     ptt.estimate_plots(x_test, f_true, mu_true, fhat, vhat, E_y, rel_sigma,
                        abs_y_samples, p_abs_y_post, p_rel_y_post,
                        x_abs, y_abs, uv_rel, fuv_rel, y_rel,
-                       t_a=r'Posterior absolute likelihood, $p(y | \mathcal{Y}, \theta)$',
+                       t_a=r'Posterior absolute likelihood, $p(u | \mathcal{Y}, \theta)$',
                        t_r=r'Posterior relative likelihood $P(x_0 \succ x_1 | \mathcal{Y}, \theta)$')
 
 plt.show()
