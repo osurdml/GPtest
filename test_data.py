@@ -1,4 +1,5 @@
 import numpy as np
+import pickle
 
 
 class ObsObject(object):
@@ -55,6 +56,9 @@ class MultiWave(VariableWave):
     def print_values(self):
         print "a: {0}, f: {1}, o: {2}, d: {3}".format(self.amplitude, self.frequency, self.offset, self.damping)
 
+    def get_values(self):
+        return self.amplitude, self.frequency, self.offset, self.damping
+
 
 class DoubleMultiWave(object):
     def __init__(self, amp_range, f_range, off_range, damp_range, n_components=2):
@@ -75,6 +79,23 @@ class DoubleMultiWave(object):
         self.f_low.print_values()
         self.f_high.print_values()
 
+
+class WaveSaver(object):
+    def __init__(self, n_trials, n_components):
+        self.amplitude = np.zeros((n_trials, n_components), dtype='float')
+        self.frequency = np.zeros((n_trials, n_components), dtype='float')
+        self.offset = np.zeros((n_trials, n_components), dtype='float')
+        self.damping = np.zeros((n_trials, n_components), dtype='float')
+
+    def set_vals(self, n, a, f, o, d):
+        self.amplitude[n] = a
+        self.frequency[n] = f
+        self.offset[n] = o
+        self.damping[n] = d
+
+    def save(self, filename):
+        with open(filename, 'wb') as fh:
+            pickle.dump(self, fh)
 
 def damped_wave(x):
     y = np.cos(6 * np.pi * (x - 0.5)) * np.exp(-10 * (x - 0.5) ** 2)

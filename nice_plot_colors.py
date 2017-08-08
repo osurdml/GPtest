@@ -10,13 +10,22 @@ vbars = ['steelblue', 'darkgreen', 'darkred', 'darkorange', 'grey', 'mediumviole
 lines = np.hstack((lines, np.ones((lines.shape[0],1))))
 bars = np.hstack((bars, np.ones((bars.shape[0],1))))
 
+
 def darken(c,power=2):
     co = np.array(c).copy()
     co = np.clip(co**power, 0, 1.0)
     co[-1] = c[-1]
     return co
 
+
 def lighten(c, power=2):
     co = 1.0-np.array(c).copy()
     co = darken(co, power)
     return 1.0-co
+
+
+def greyify(c, grey=0.5, target_level=0.5):
+    co = np.array(c).copy()
+    co = np.clip(co + grey*(target_level-co), 0, 1.0)
+    co[-1] = c[-1]
+    return co

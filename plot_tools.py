@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from nice_plot_colors import *
+from cycler import cycler
+
+plt.rc('axes', prop_cycle=(cycler('color', [greyify(c, .5, .8) for c in reversed(lines)])))
 
 def make_poly_array(x,y,sigma):
     nx = len(x)
@@ -14,9 +17,15 @@ def make_poly_array(x,y,sigma):
 
 
 def plot_with_bounds(ax, x, y, s, c=lines[0]):
-    xy = make_poly_array(x, y, s)
+    isort = np.argsort(x.flat)
+    xx, yy = x[isort], y[isort]
+    try:
+        ss = s[isort]
+    except:
+        ss = s
+    xy = make_poly_array(xx, yy, ss)
     h_patch = Polygon(xy, ec=c, fc=lighten(c, 3), alpha=0.5)
-    h_fx, = ax.plot(x, y, lw=1.5, c=c)
+    h_fx, = ax.plot(xx, yy, lw=1.5, c=c)
     ax.add_patch(h_patch)
     clim = ax.get_ylim()
     ax.set_ylim(bottom = min(clim[0],xy[:,1].min()), top = max(clim[1], xy[:,1].max()))
@@ -123,13 +132,19 @@ def true_plots_rel(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train, y
 
 def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
                    y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
-                   class_icons = ['ko', 'wo'], marker_options = {'mec':'k', 'mew':0.5}, *args, **kwargs):
+                   class_icons = ['ko', 'wo'], marker_options = {'mec':'k', 'mew':0.5}, n_posterior_samples=0, *args, **kwargs):
     fig, (ax_l, ax_a, ax_r) = plot_setup_2d(**kwargs)
+
+    # Posterior samples
+    if n_posterior_samples > 0:
+        y_post = np.random.multivariate_normal(fhat.flatten(), vhat, n_posterior_samples)
+        h_pp = ax_l.plot(xt, y_post.T, lw=0.8)
 
     # Latent function
     hf, hpf = plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])
 
     hf_hat, hpf_hat = plot_with_bounds(ax_l, xt, fhat, np.sqrt(np.atleast_2d(vhat.diagonal()).T), c=lines[1])
+
     ax_l.legend([hf, hf_hat], [r'True latent function, $f(x)$', r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
 
     # Absolute posterior likelihood

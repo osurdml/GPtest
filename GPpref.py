@@ -6,22 +6,25 @@ from scipy.special import digamma, polygamma
 from scipy.stats import norm, beta
 from scipy.linalg import block_diag
 
-#define a standard normal pdf
+# Define a standard normal pdf
 _sqrt_2pi = np.sqrt(2*np.pi)
 def std_norm_pdf(x):
     x = np.clip(x,-1e150,1e150)
     return norm.pdf(x)
-    #return np.exp(-(x**2)/2)/_sqrt_2pi
+    # return np.exp(-(x**2)/2)/_sqrt_2pi
+
 
 def std_norm_cdf(x):
     x = np.clip(x, -30, 100 )
     return norm.cdf(x)
+
 
 def norm_pdf_norm_cdf_ratio(z):
     # Inverse Mills ratio for stability
     out = -z
     out[z>-30] = std_norm_pdf(z[z>-30])/std_norm_cdf(z[z>-30])
     return out
+
 
 # Define squared distance calculation function
 def squared_distance(A,B):
@@ -35,12 +38,14 @@ def squared_distance(A,B):
     sqDist = A2 + B2 - AB
     return sqDist
 
+
 def print_hyperparameters(theta, log=False):
     if log is True:
         theta = np.exp(theta)
     nl = len(theta)-3
     lstr = ', '.join(['%.2f']*nl) % tuple(theta[:nl])
     print "l: {0}, sig_f: {1:0.2f}, sig: {2:0.2f}, v: {3:0.2f}".format(lstr, theta[-3], theta[-2], theta[-1])
+
 
 # Define squared exponential CovarianceFunction function
 class SquaredExponential(object):
@@ -168,16 +173,16 @@ class AbsBoundProbit(object):
         ml = np.clip(std_norm_cdf(f*self._isqrt2sig), 1e-12, 1.0-1e-12)
         return ml
 
-    def alpha(self, f):
-        return self.v * self.mean_link(f)
-
-    def beta(self, f):
-        return self.v * (1-self.mean_link(f))
+    # def alpha(self, f):
+    #     return self.v * self.mean_link(f)
+    #
+    # def beta(self, f):
+    #     return self.v * (1-self.mean_link(f))
 
     def get_alpha_beta(self, f):
         ml = self.mean_link(f)
         aa = self.v * ml
-        bb = self.v * (1-ml)
+        bb = self.v - aa    # = self.v * (1-ml)
         return aa, bb
 
     def likelihood(self, y, f):
@@ -186,6 +191,10 @@ class AbsBoundProbit(object):
 
     def log_likelihood(self, y, f):
         return np.log(self.likelihood(y,f))
+
+    def cdf(self, y, f):
+        aa, bb = self.get_alpha_beta(f)
+        return beta.cdf(y, aa, bb)
 
     def derivatives(self, y, f):
 
@@ -391,6 +400,12 @@ class PreferenceGaussianProcess(object):
         var_latent = Ktt - np.matmul(kt.T, np.matmul(iKW, np.matmul(self.W, kt)))
         return mean_latent, var_latent
 
+    def sample_latent_posterior(self, mean, covariance, n_samples = 1):
+        assert mean.shape[0] == covariance.shape[0]
+        assert covariance.shape[1] == covariance.shape[0]
+        y_post = np.random.multivariate_normal(mean.flatten(), covariance, n_samples)
+        return y_post
+
     def _check_latent_input(self, x=None, fhat=None, varhat=None):
         if (fhat is None or varhat is None):
             if x is not None:
@@ -464,7 +479,10 @@ class ObservationSampler(object):
             x_test = x_test * np.diff(domain, axis=0) + domain[0, :]
         return x_test
 
-    def cheat_multi_sampler(self, x):
+    def gaussian_multi_pairwise_sampler(self, x):
+        # Find the maximum from a set of n samples (x should be n by d)
+        # Return pairwise relationships that one point is higher than the others
+        # Sample from Gaussian distributions around function values
         fx = np.random.normal(loc=self.f(x), scale=self.l.sigma)
         max_xi = np.argmax(fx)
         other_xi = np.delete(np.arange(x.shape[0]), max_xi)
