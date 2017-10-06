@@ -271,16 +271,23 @@ class PreferenceGaussianProcess(object):
         self._nx = self.x_train_all.shape[0]
         self.Ix = np.eye(self._nx)
 
-    def add_observations(self, x, y, uvi=None):
+    def add_observations(self, x, y, uvi=None, keep_f=False):
+        # keep_f is used to reset the Laplace solution. If it's a small update, it's sometimes better to keep the old
+        # values and append some 0's for the new observations (keep_f = True), otherwise it is reset (keep_f = False)
+        # Default is keep_f = False
         if uvi is None:
-            x_abs = np.concatenate((self.x_abs, x), 0)
-            y_abs = np.concatenate((self.y_abs, y), 0)
+            x_abs = np.concatenate((self.x_abs, np.atleast_2d(x)), 0)
+            y_abs = np.concatenate((self.y_abs, np.atleast_2d(y)), 0)
             self.set_observations(self.x_rel, self.uvi_rel, x_abs, self.y_rel, y_abs)
         else:
-            x_rel = np.concatenate((self.x_rel, x), 0)
-            y_rel = np.concatenate((self.y_rel, y), 0)
+            x_rel = np.concatenate((self.x_rel, np.atleast_2d(x)), 0)
+            y_rel = np.concatenate((self.y_rel, np.atleast_2d(y)), 0)
             uvi_rel = np.concatenate((self.uvi_rel, uvi + self.x_rel.shape[0]), 0)
             self.set_observations(x_rel, uvi_rel, self.x_abs, y_rel, self.y_abs)
+        if not keep_f:
+            self.f = None
+        else:
+            self.f = np.vstack((self.f, np.zeros((x.shape[0], 1))))
 
     def calc_laplace(self, loghyp):
         self.kern.lengthscale = np.exp(loghyp[0:self._xdim])
@@ -289,7 +296,7 @@ class PreferenceGaussianProcess(object):
         self.abs_likelihood.set_sigma(np.exp(loghyp[-2])) # I think this sigma relates to sigma_f in the covariance, and is actually possibly redundant
         self.abs_likelihood.set_v(np.exp(loghyp[-1]))     # Should this relate to the rel_likelihood probit noise?
 
-        if self.f is None or self.f.shape[0] is not self._nx:
+        if self.f is None or self.f.shape[0] is not self._nx or np.isnan(self.f).any():
             f = np.zeros((self._nx, 1), dtype='float')
         else:
             f = self.f

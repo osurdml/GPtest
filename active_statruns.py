@@ -85,6 +85,8 @@ learners = [Learner(active_learners.ActiveLearner, {'p_rel': 0.5, 'n_rel_samples
             # Learner(ABSThresh, {'n_test': 100, 'p_thresh': 0.7}),  # 'ABSThresh'
             # Learner(PeakComparitor, {'gamma': 2.0, 'n_test': 50, 'n_rel_samples': n_rel_samples}),  #  'PeakComparitor'
             # Learner(LikelihoodImprovement, {'req_improvement': 0.60, 'n_test': 50, 'gamma': 2.0, 'n_rel_samples': n_rel_samples, 'p_thresh': 0.7})  #  'LikelihoodImprovement'
+            Learner(active_learners.SampledThreshold, {'n_test':50, 'n_samples':10, 'y_threshold':0.8, 'p_pref_tol':1e-3, 'n_mc_abs':5}), # 'SampledThreshold'
+            Learner(active_learners.SampledClassification, {'n_test':50, 'n_samples':10, 'y_threshold':0.8, 'p_pref_tol':1e-3, 'n_mc_abs':5}), # 'SampledClassification'
             ]
 names = ['Random (rel and abs)','Random (rel only)', 'Random (abs only)', 'UCB (abs only)', 'EI (Abs)', 'EI (Rel)', 'UCBCombined (rel and abs)']
 assert len(names) == len(learners), "Number of names does not match number of learners."

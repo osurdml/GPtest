@@ -37,6 +37,9 @@ class VariableWave(object):
     def print_values(self):
         print "a: {0:.2f}, f: {1:.2f}, o: {2:.2f}, d: {3:.2f}".format(self.amplitude, self.frequency, self.offset, self.damping)
 
+    def export_state(self):
+        return dict(amplitude=self.amplitude, frequency=self.frequency, offset=self.offset, damping=self.damping)
+
 
 class MultiWave(VariableWave):
     def out(self, x):

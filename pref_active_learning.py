@@ -12,7 +12,7 @@ nowstr = time.strftime("%Y_%m_%d-%H_%M")
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
-save_plots = False
+save_plots = True
 
 # log_hyp = np.log([0.1,0.5,0.1,10.0]) # length_scale/s, sigma_f, sigma_n_rel, sigma_beta, v_beta
 # log_hyp = np.log([0.07, 0.75, 0.25, 1.0, 28.1])
@@ -20,7 +20,7 @@ save_plots = False
 log_hyp = np.log([0.02, 0.5, 0.1, 0.8, 60.0])
 np.random.seed(2)
 
-n_rel_train = 1
+n_rel_train = 2
 n_abs_train = 1
 rel_sigma = 0.05
 delta_f = 1e-5
@@ -32,7 +32,7 @@ n_xplot = 101
 n_mcsamples = 1000
 n_ysamples = 101
 
-n_queries = 10
+n_queries = 30
 
 # Define polynomial function to be modelled
 # true_function = test_data.multi_peak
@@ -78,14 +78,18 @@ if save_plots:
     fig_t.savefig(fig_dir+'true.pdf', bbox_inches='tight')
 
 # Construct active learner object
-# learner = active_learners.UCBAbsRelD(x_rel, uvi_rel, x_abs,  y_rel, y_abs, delta_f=delta_f,
-#                                          rel_likelihood=GPpref.PrefProbit(), abs_likelihood=GPpref.AbsBoundProbit())
+GP_kwargs = {'x_rel':x_rel, 'uvi_rel':uvi_rel, 'x_abs':x_abs,  'y_rel':y_rel, 'y_abs':y_abs, 'delta_f':delta_f,
+               'rel_likelihood':GPpref.PrefProbit(), 'abs_likelihood':GPpref.AbsBoundProbit()}
+
+# learner = active_learners.UCBAbsRelD(**active_args)
 # # obs_arguments = {'req_improvement': 0.60, 'n_test': 50, 'gamma': 2.0, 'n_rel_samples': 5, 'p_thresh': 0.7}
 # obs_arguments = {'n_test': 100, 'p_rel': 0.5, 'n_rel_samples': 5, 'gamma': 2.0}
 
-learner = active_learners.ExpectedImprovementRel(x_rel, uvi_rel, x_abs,  y_rel, y_abs, delta_f=delta_f,
-                                         rel_likelihood=GPpref.PrefProbit(), abs_likelihood=GPpref.AbsBoundProbit())
-obs_arguments = {'n_test': 100, 'zeta': 0.1}
+# learner = active_learners.ExpectedImprovementRel(**GP_kwargs)
+# obs_arguments = {'n_test': 100, 'zeta': 0.1, 'p_rel':1.0}
+
+learner = active_learners.SampledClassification(**GP_kwargs)
+obs_arguments = {'n_test':50, 'n_samples':10, 'y_threshold':0.8, 'p_pref_tol':1e-3, 'n_mc_abs':5}
 
 # Get initial solution
 learner.set_hyperparameters(log_hyp)
@@ -99,7 +103,8 @@ if save_plots:
     # fig_p.savefig(fig_dir+'posterior00.pdf', bbox_inches='tight')
 
 for obs_num in range(n_queries):
-    obs_arguments['p_rel'] = max(0.0, (n_queries - obs_num) / float(n_queries))
+    if 'p_rel' in obs_arguments:
+        obs_arguments['p_rel'] = max(0.0, (n_queries - obs_num) / float(n_queries))
     next_x = learner.select_observation(**obs_arguments)
     if next_x.shape[0] == 1:
         next_y, next_f = abs_obs_fun.generate_observations(next_x)
@@ -129,3 +134,4 @@ else:
     pdf_pages.close()
 
 plt.show()
+print "Finished!"

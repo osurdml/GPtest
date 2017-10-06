@@ -5,31 +5,30 @@ import GPpref
 import scipy.optimize as op
 import plot_tools as ptt
 import test_data
+import yaml
 # from scipy.stats import beta
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
-np.random.seed(1)
+np.random.seed(2)
 
 train_hyper = False
 use_test_data = False
 verbose = True
 
-#log_hyp = np.log([0.2, 0.5, 0.1, 1.0, 10.0]) # length_scale/s, sigma_f, sigma_n_rel, sigma_beta, v_beta
+with open('./data/mid_freq_3.yml', 'rt') as fh:
+    wave = yaml.safe_load(fh)
 
-# random_wave = test_data.MultiWave(amp_range=[0.6, 1.2], f_range=[10.0, 30.0], off_range=[0.1, 0.9], damp_range=[250.0, 350.0], n_components=3)
-# log_hyp = np.log([0.018, 1.0, 0.1, 0.6, 60.0])
+random_wave = test_data.MultiWave(**wave['wave_params'])
+log_hyp = np.log(wave['hyperparameters'])
 
-random_wave = test_data.MultiWave(amp_range=[1.2, 3.0], f_range=[5.0, 8.0], off_range=[0.1, 0.9], damp_range=[30.0, 50.0], n_components=2)
-log_hyp = np.log([0.1, 2.0, 0.1, 5.0, 30.0])
+n_rel_train = 30
+n_abs_train = 30
 
-n_rel_train = 10
-n_abs_train = 0
-
-rel_sigma = 0.1
+rel_sigma = 0.05
 delta_f = 1e-5
 
-beta_sigma = 1.5
-beta_v = 40.0
+beta_sigma = 0.8
+beta_v = 80.0
 
 n_xplot = 101
 n_mcsamples = 1000
@@ -51,7 +50,7 @@ abs_obs_fun = GPpref.AbsObservationSampler(true_function, GPpref.AbsBoundProbit(
 
 # Main program
 # True function
-x_plot = np.linspace(-1.0,1.0,n_xplot,dtype='float')
+x_plot = np.linspace(0.0,1.0,n_xplot,dtype='float')
 x_test = np.atleast_2d(x_plot).T
 f_true = abs_obs_fun.f(x_test)
 mu_true = abs_obs_fun.mean_link(x_test)

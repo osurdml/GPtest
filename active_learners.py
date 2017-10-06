@@ -2,16 +2,19 @@ import numpy as np
 import GPpref
 from scipy.stats import beta
 import plot_tools as ptt
+import time
 
 
 def calc_ucb(fhat, vhat, gamma=2.0, sigma_offset=0.0):
     return fhat + gamma * (np.sqrt(np.atleast_2d(vhat.diagonal()).T) - sigma_offset)
+
 
 def softmax_selector(x, tau=1.0):
     # High tau is more random
     ex = np.exp((x - x.max())/tau)
     Px = ex/ex.sum()
     return np.random.choice(len(x), p=Px)
+
 
 class ActiveLearner(GPpref.PreferenceGaussianProcess):
     def init_extras(self):
@@ -74,6 +77,7 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
                                t_r=r'Posterior relative likelihood $P(x_0 \succ x_1 | \mathcal{Y}, \theta)$')
         return fig_p, (ax_p_l, ax_p_a, ax_p_r)
 
+
 class UCBLatent(ActiveLearner):
     # All absolute returns
     def select_observation(self, domain=None, n_test=100, gamma=2.0):
@@ -82,6 +86,7 @@ class UCBLatent(ActiveLearner):
         ucb = calc_ucb(fhat, vhat, gamma)
         return x_test[[np.argmax(ucb)], :]
 
+
 class UCBLatentSoftmax(ActiveLearner):
     # All absolute returns
     def select_observation(self, domain=None, n_test=100, gamma=2.0, tau=1.0):
@@ -89,6 +94,7 @@ class UCBLatentSoftmax(ActiveLearner):
         fhat, vhat = self.predict_latent(x_test)
         ucb = calc_ucb(fhat, vhat, gamma).flatten()
         return x_test[[softmax_selector(ucb, tau)], :]
+
 
 class UCBOut(ActiveLearner):
     # NOT FULLY IMPLEMENTED - BROKEN
@@ -172,6 +178,7 @@ class ABSThresh(ActiveLearner):
         # ucb = calc_ucb(fhat, vhat, gamma)
         return x_test[[np.argmax(p_under_thresh * (1.0 - p_under_thresh))], :]
 
+
 class UCBAbsRel(ActiveLearner):
     def select_observation(self, domain=None, n_test=100, p_rel=0.5, n_rel_samples=2, gamma=2.0, tau=1.0):
         x_test = self.uniform_domain_sampler(n_test, domain)
@@ -192,6 +199,7 @@ class UCBAbsRel(ActiveLearner):
         else:
             best_n = [softmax_selector(ucb, tau=tau/2.0)]   #[np.argmax(ucb)]  #
         return x_test[best_n, :]
+
 
 class UCBAbsRelD(ActiveLearner):
     def select_observation(self, domain=None, n_test=100, p_rel=0.5, n_rel_samples=2, gamma=2.0, tau=1.0):
@@ -219,18 +227,21 @@ class PeakComparitor(ActiveLearner):
     def test_observation(self, x, y, x_test, gamma):
         self.store_observations()
         self.add_observations(x, y, self._default_uvi)
-        f = self.solve_laplace()
+        self.solve_laplace()
         fhat, vhat = self.predict_latent(x_test)
         ucb = calc_ucb(fhat, vhat, gamma)
         self.reset_observations()
         return ucb.max()
 
     def store_observations(self):
-        self.crx, self.cuv, self.cax, self.cry, self.cay = self.get_observations()
+        crx, cuv, cax, cry, cay = self.get_observations()
+        self.crx, self.cuv, self.cax, self.cry, self.cay = crx.copy(), cuv.copy(), cax.copy(), cry.copy(), cay.copy()
+        self.crf = self.f.copy()
 
     def reset_observations(self):
         try:
             self.set_observations(self.crx, self.cuv, self.cax, self.cry, self.cay)
+            self.f = self.crf
         except AttributeError:
             print "reset_observations failed: existing observations not found"
 
@@ -304,7 +315,8 @@ class LikelihoodImprovement(PeakComparitor):
         Vmax = V.max()
         # best_n = np.argpartition(V, -n_comparators)[-n_comparators:]
         # best = np.argmax(V)
-        print 'V_max = {0}'.format(Vmax)
+        if self.verbose:
+            print 'V_max = {0}'.format(Vmax)
 
         if Vmax < req_improvement:
             # aa, bb = self.abs_likelihood.get_alpha_beta(fhat)
@@ -332,64 +344,103 @@ class SampledThreshold(PeakComparitor):
         threshold_utility = 0.0
         # For each one, evaluate the probability mass above the threshold in the absolute function
         for yi in y_post:
-            threshold_utility += self.mean_P_above_threshold(yi, y_threshold)
+            threshold_utility += self.point_utility(yi, y_threshold)
         return threshold_utility/n_samples
 
-    def mean_P_above_threshold(self, f, y_threshold):
+    def point_utility(self, f, y_threshold):
+        # This is the mean probability mass above the threshold value
         pmass = 0.0
         for fi in f:
             pmass += 1.0 - self.abs_likelihood.cdf(y_threshold, fi)
         return pmass/f.shape[0]
 
-    def test_observation(self, x, y, x_test, n_samples, y_threshold):
-        self.store_observations()
-        self.add_observations(x, y, self._default_uvi)
-        util, f, v = self.calculate_threshold_utility(x_test, n_samples, y_threshold)
+    def test_observation(self, x, y, uvi, x_test, n_samples, y_threshold, f = None):
+        self.add_observations(x, y, uvi, keep_f=True)
+        self.solve_laplace()
+        fhat, vhat = self.predict_latent(x_test)
+        util = self.calculate_threshold_utility(fhat, vhat, n_samples, y_threshold)
         self.reset_observations()
         return util
 
-    def select_observation(self, domain=None, x_test=None, n_test=100, n_samples=100, y_threshold=0.8):
+    def select_observation(self, domain=None, x_test=None, n_test=50, n_samples=50, y_threshold=0.8, p_pref_tol=1e-3, n_mc_abs=5):
         # Generate a set of test points in the domain (if not specified)
         if x_test is None:
-            x_test = self.linear_domain_sampler(n_test, domain)
+            # x_test = self.linear_domain_sampler(n_test, domain)
+            x_test = self.uniform_domain_sampler(n_test, domain)
+            x_test.sort(axis=0)
+        n_test = len(x_test)
 
         # Sample a set of functions from the current posterior
-        self.solve_laplace()
+        # We save the f value because otherwise it gets out of whack when we add observations
+        flap = self.solve_laplace()
         fhat, vhat = self.predict_latent(x_test)
-        base_utility = self.calculate_threshold_utility(fhat, vhat, n_samples, y_threshold)
-        max_xi = np.argmax(fhat)
-        other_xi = np.delete(np.arange(n_test), max_xi)
-        uvi = np.vstack((max_xi * np.ones(n_test - 1, dtype='int'), other_xi)).T
+        # base_utility = self.calculate_threshold_utility(fhat, vhat, n_samples, y_threshold)
+
+        # Check a random set of pairwise relatives and all absolutes (massive sampling)
+
+        # Generate a set of random pairs (this randomly pairs all x_test points)
+        uvi = np.random.choice(n_test, (n_test/2, 2), replace=False)
         p_pref = self.rel_likelihood.posterior_likelihood(fhat, vhat, uvi, y=-1)
-        V = np.zeros(n_test - 1)
-        x = np.zeros((2, 1), dtype='float')
-        x[0] = x_test[max_xi]
+        V_max_rel = 0.0
 
+        self.store_observations()
+
+        t_rel = time.time()
         # Now calculate the expected value for each observation pair
-        for i,uvi1 in enumerate(other_xi):
-            x[1] = x_test[uvi1]
-            V[i] += p_pref[i]*self.test_observation(x, self._minus_y_obs, x_test, max_xi)
-            if (1-p_pref[i]) > 1e-3:
-                V[i] += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, x_test, max_xi)
+        for i, uv in enumerate(uvi):
+            x = x_test[uv]
+            V_rel = 0.0
+            if p_pref[i] < p_pref_tol:
+                V_rel += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+            elif p_pref[i] > 1.0-p_pref_tol:
+                V_rel += p_pref[i]*self.test_observation(x, self._minus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+            else:
+                V_rel += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+                V_rel += p_pref[i] * self.test_observation(x, self._minus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+            if V_rel >= V_max_rel:
+                V_max_rel = V_rel
+                x_best_rel = x
 
-        Vmax = V.max()
         # best_n = np.argpartition(V, -n_comparators)[-n_comparators:]
         # best = np.argmax(V)
-        print 'V_max = {0}'.format(Vmax)
+        if self.verbose:
+            print 'V_max_rel = {0}, x = {2}, t = {1}s'.format(V_max_rel[0], time.time()-t_rel, x_best_rel[:,0])
 
-        if Vmax < req_improvement:
-            # aa, bb = self.abs_likelihood.get_alpha_beta(fhat)
-            # p_under_thresh = beta.cdf(p_thresh, aa, bb)
-            # return x_test[[np.argmax(p_under_thresh*(1.0-p_under_thresh))], :]
-            ucb = calc_ucb(fhat, vhat, gamma, self.rel_likelihood.sigma)
-            return x_test[[np.argmax(ucb)], :]
-        else:
-            best_n = []
-            while len(best_n) < n_comparators:
-                cbest = np.argmax(V)
-                best_n.append(cbest)
-                V = V * np.sqrt(GPpref.squared_distance(x_test[[other_xi[cbest]], :], x_test[other_xi])[0])
-            xi = np.zeros(n_comparators+1, dtype='int')
-            xi[0] = max_xi
-            xi[1:] = other_xi[best_n]
-            return x_test[xi, :]
+        V_max = 0.0
+        t_rel = time.time()
+        for i, x in enumerate(x_test):
+            F = fhat[i] + np.random.randn(n_mc_abs)*np.sqrt(vhat[i,i])
+            Y, mu = self.abs_likelihood.generate_samples(F)
+            V_abs = 0.0
+            for y in Y:
+                try:
+                    V_abs += self.test_observation(x, y, None, x_test, n_samples, y_threshold, f=flap)
+                except ValueError:
+                    print "NaN Issue"
+            V_abs /= n_mc_abs
+            if V_abs > V_max:
+                V_max = V_abs
+                x_best = x
+        if self.verbose:
+            print 'V_max_abs = {0}, x = {2}, t = {1}s'.format(V_max, time.time() - t_rel, x_best)
+
+        if V_max_rel > V_max:
+            x_best = x_best_rel
+
+        return x_best
+
+
+class SampledClassification(SampledThreshold):
+    def point_utility(self, f, y_threshold):
+        # Class accuracy
+        # Note this assumes the sampled functions are actual functions (not the actual gaussian posterior distribution,
+        # which might be a good alternative, but it isn't this method)
+        fm = self.abs_likelihood.mean_link(f)
+        fa = self.abs_likelihood.v * fm
+        fb = self.abs_likelihood.v - fa
+        P_below = GPpref.beta.cdf(y_threshold, fa, fb)
+
+        predict_below = fm < y_threshold
+        predicted_accuracy = P_below[predict_below].sum() + (1.0 - P_below[~predict_below]).sum()
+
+        return predicted_accuracy/len(f)
