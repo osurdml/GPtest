@@ -18,12 +18,12 @@ def single_plot(data, x=None, names=None, title='', xlabel='Number of samples', 
     hf, hax = plt.subplots()
     hl = []
     for dd in data:
-        mean_err = np.mean(dd, axis=1)
+        mean_err = np.nanmean(dd, axis=1)
         if percentile < 0:
-            err_lo = np.std(dd, axis=1, ddof=1) / np.sqrt(n_trials)
+            err_lo = np.nanstd(dd, axis=1, ddof=1) / np.sqrt(n_trials)
             err_hi = err_lo
         elif percentile == 0:
-            err_lo = np.std(dd, axis=1)
+            err_lo = np.nanstd(dd, axis=1)
             err_hi = err_lo
         else:
             err_lo = mean_err - np.percentile(dd, percentile, axis=1)
@@ -40,8 +40,7 @@ def single_plot(data, x=None, names=None, title='', xlabel='Number of samples', 
     hax.set_ylabel(ylabel)
     return hf, hax
 
-
-def plot_results(wrms_results, true_pos_results, selected_error, obs_array, data_dir=None, bars=True, norm_comparator=0, exclusions=[4]):
+def plot_results(wrms_results, true_pos_results, selected_error, obs_array, relative_error=None, data_dir=None, bars=True, norm_comparator=0, exclusions=[]):
     methods_indexes = []
     for i in range(wrms_results.shape[0]):
         if i not in exclusions:
@@ -53,6 +52,7 @@ def plot_results(wrms_results, true_pos_results, selected_error, obs_array, data
     wrms_results=wrms_results[methods_indexes,:,:]
     true_pos_results=true_pos_results[methods_indexes,:,:]
     selected_error=selected_error[methods_indexes,:,:]
+
 
     f0, ax0 = single_plot(wrms_results, names=names, ylabel='Weighted RMSE', bars=bars)
     f1, ax1 = single_plot(true_pos_results, names=names, ylabel='True positive selections (out of 15)', bars=True, precut=1, percentile=0)
@@ -67,6 +67,13 @@ def plot_results(wrms_results, true_pos_results, selected_error, obs_array, data
         ax.append(ax3)
     except:
         pass
+
+    if relative_error is not None:
+        relative_error=relative_error[methods_indexes,:,:]
+        fr, axr = single_plot(relative_error, names=names, ylabel='Mean relative prediction error', bars=True)
+        f.append(fr); ax.append(axr)
+        if data_dir is not None:
+            fr.savefig(data_dir + '/rel_error.pdf', bbox_inches='tight')
 
     if data_dir is not None:
         f0.savefig(data_dir + '/wrms.pdf', bbox_inches='tight')
@@ -99,10 +106,16 @@ def load_and_plot(save_plots=True, *args, **kwargs):
     data_dir = askdirectory(initialdir='./data/') # open folder GUI
 
     wrms_results, true_pos_results, selected_error, obs_array = load_data(data_dir)
+    try:
+        with open(data_dir + '/relative_error.pkl', 'rb') as fh:
+            relative_error = pickle.load(fh)
+    except IOError:
+        print "No relative error data found."
+        relative_error = None
 
     if not save_plots:
         data_dir = None
-    hf = plot_results(wrms_results, true_pos_results, selected_error, obs_array, data_dir=data_dir, *args, **kwargs)
+    hf = plot_results(wrms_results, true_pos_results, selected_error, obs_array, data_dir=data_dir, relative_error=relative_error, *args, **kwargs)
     plt.show()
     return hf
 

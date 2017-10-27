@@ -5,7 +5,8 @@ from matplotlib.patches import Polygon
 from nice_plot_colors import *
 from cycler import cycler
 
-plt.rc('axes', prop_cycle=(cycler('color', [greyify(c, .5, .8) for c in reversed(lines)])))
+# plt.rc('axes', prop_cycle=(cycler('color', [greyify(c, .5, .8) for c in reversed(lines)])))
+plt.rc('axes', prop_cycle=(cycler('color', lines)))
 
 def make_poly_array(x,y,sigma):
     nx = len(x)

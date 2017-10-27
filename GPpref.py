@@ -6,6 +6,9 @@ from scipy.special import digamma, polygamma
 from scipy.stats import norm, beta
 from scipy.linalg import block_diag
 
+class LaplaceException(Exception):
+    pass
+
 # Define a standard normal pdf
 _sqrt_2pi = np.sqrt(2*np.pi)
 def std_norm_pdf(x):
@@ -86,7 +89,7 @@ class PrefProbit(object):
     def z_k(self, y, f, scale=None):
         if scale is None:
             scale = self._isqrt2sig
-        zc = scale * (f[:, 1, None] - f[:, 0, None]) # Weird none is to preserve shape
+        zc = scale * (f[:, 1, None] - f[:, 0, None]) # Weird None is to preserve shape
         return y * zc
 
     def I_k(self, x, uv):  # Jensen and Nielsen
@@ -275,26 +278,30 @@ class PreferenceGaussianProcess(object):
         # keep_f is used to reset the Laplace solution. If it's a small update, it's sometimes better to keep the old
         # values and append some 0's for the new observations (keep_f = True), otherwise it is reset (keep_f = False)
         # Default is keep_f = False
-        if uvi is None:
+        if uvi is None: # Absolute observation/s
+            if keep_f:
+                self.f = np.vstack((self.f, np.zeros((x.shape[0], 1))))
             x_abs = np.concatenate((self.x_abs, np.atleast_2d(x)), 0)
             y_abs = np.concatenate((self.y_abs, np.atleast_2d(y)), 0)
             self.set_observations(self.x_rel, self.uvi_rel, x_abs, self.y_rel, y_abs)
-        else:
+        else:           # Relative observation/s
+            if keep_f:  # The rel observations are stored at the front of f[0:_n_rel]
+                self.f = np.vstack((self.f[0:self._n_rel], np.zeros((x.shape[0], 1)), self.f[self._n_rel:]))
             x_rel = np.concatenate((self.x_rel, np.atleast_2d(x)), 0)
             y_rel = np.concatenate((self.y_rel, np.atleast_2d(y)), 0)
             uvi_rel = np.concatenate((self.uvi_rel, uvi + self.x_rel.shape[0]), 0)
             self.set_observations(x_rel, uvi_rel, self.x_abs, y_rel, self.y_abs)
-        if not keep_f:
-            self.f = None
-        else:
-            self.f = np.vstack((self.f, np.zeros((x.shape[0], 1))))
 
-    def calc_laplace(self, loghyp):
+    def set_hyperparameters(self, loghyp):
         self.kern.lengthscale = np.exp(loghyp[0:self._xdim])
-        self.kern.variance = (np.exp(loghyp[self._xdim]))**2
+        self.kern.variance = 1.0 # (np.exp(loghyp[self._xdim]))**2
         self.rel_likelihood.set_sigma(np.exp(loghyp[-3])) # Do we need different sigmas for each likelihood? Yes!
         self.abs_likelihood.set_sigma(np.exp(loghyp[-2])) # I think this sigma relates to sigma_f in the covariance, and is actually possibly redundant
         self.abs_likelihood.set_v(np.exp(loghyp[-1]))     # Should this relate to the rel_likelihood probit noise?
+
+    def calc_laplace(self, loghyp=None):
+        if loghyp is not None:
+            self.set_hyperparameters(loghyp)
 
         if self.f is None or self.f.shape[0] is not self._nx or np.isnan(self.f).any():
             f = np.zeros((self._nx, 1), dtype='float')
@@ -357,8 +364,8 @@ class PreferenceGaussianProcess(object):
             f = f_new
             nloops += 1
             if nloops > 10000:
-                raise RuntimeError("Maximum loops exceeded in calc_laplace!!")
-            if self.verbose:
+                raise LaplaceException("Maximum loops exceeded in calc_laplace!!")
+            if self.verbose > 1:
                 lml = py - 0.5*np.matmul(f.T, np.matmul(self.iK, f)) - 0.5*np.log(np.linalg.det(np.matmul(W, self.Kxx) + self.Ix))
                 print "Laplace iteration {0:02d}, log p(y|f) = {1:0.2f}".format(nloops, lml[0,0])
 

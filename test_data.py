@@ -2,9 +2,50 @@ import numpy as np
 import pickle
 
 
+def wrms(y_true, y_est, weight=True):
+    # RMS weighted by the true value of y (high value high importance)
+    if weight:
+        w = y_true
+    else:
+        w = 1.0
+    return np.sqrt(np.mean(((y_true - y_est)*w)**2))
+
+
+def wrms_misclass(y_true, y_est):
+    # This is the misclassification error, where the weight is the max of the true or predicted value (penalise
+    # predicting high values if the true value is low)
+    w = np.power(np.maximum(y_true, y_est), 2)
+    return np.sqrt(np.mean(((y_true - y_est)*w)**2))
+
+
+def rel_error(y_true, prel_true, y_est, prel_est, weight=False):
+    if weight:
+        y_max = np.maximum(y_true.flatten(), y_est.flatten())
+    else:
+        y_max = np.ones(y_true.shape[0], dtype='float')
+    nx = prel_true.shape[0]
+    mean_p_err = 0.0
+    w_sum = 0.0
+    for i in range(nx):
+        for j in range(i, nx):
+            w = max(y_max[i], y_max[j])
+            w_sum += w
+            mean_p_err += w*np.abs(prel_true[i,j] - prel_est[i,j])
+    return mean_p_err/w_sum
+
+
 class ObsObject(object):
     def __init__(self, x_rel, uvi_rel, x_abs, y_rel, y_abs):
         self.x_rel, self.uvi_rel, self.x_abs, self.y_rel, self.y_abs = x_rel, uvi_rel, x_abs, y_rel, y_abs
+
+def obs_stats(obs_array, n_rel_samples):
+    for method in obs_array:
+        n_rel = 0.0
+        n_abs = 0.0
+        for ob in method['obs']:
+            n_rel += ob.x_rel.shape[0]/n_rel_samples
+            n_abs += ob.x_abs.shape[0]
+        print "{0}: p_rel = {1}, p_abs = {2}".format(method['name'], n_rel/(n_rel+n_abs), n_abs/(n_rel+n_abs))
 
 
 class VariableWave(object):
@@ -89,8 +130,10 @@ class WaveSaver(object):
         self.frequency = np.zeros((n_trials, n_components), dtype='float')
         self.offset = np.zeros((n_trials, n_components), dtype='float')
         self.damping = np.zeros((n_trials, n_components), dtype='float')
+        self.n = 0
 
     def set_vals(self, n, a, f, o, d):
+        self.n = n
         self.amplitude[n] = a
         self.frequency[n] = f
         self.offset[n] = o
@@ -126,5 +169,39 @@ def data1():
     x_abs = np.array([[0.2]])
     y_abs = np.array([[0.5]])
     mu_abs = np.array([[0.0]])
+
+    return x_rel, uvi_rel, uv_rel, y_rel, fuv_rel, x_abs, y_abs, mu_abs
+
+
+def data2():
+    x_rel = np.array([[ 0.8517731 ], [ 0.66358258],
+                      [ 0.06054717], [ 0.45331369],
+                      [ 0.8461625 ], [ 0.58854979]])
+    uvi_rel = np.array([[0, 1], [2, 3], [4, 5]], dtype='int')
+    uv_rel = x_rel[uvi_rel][:,:,0]
+    y_rel = np.array([[-1], [1], [1]], dtype='int')
+    fuv_rel = np.array([[0.0043639, -0.10653237], [0.01463141, 0.05046293],
+                        [0.01773679, 0.45730181]])
+
+    x_abs = np.array([[0.43432351]])
+    y_abs = np.array([[0.38966307]])
+    mu_abs = np.array([[0.0]])
+
+    return x_rel, uvi_rel, uv_rel, y_rel, fuv_rel, x_abs, y_abs, mu_abs
+
+
+def data3():
+    x_rel = np.array([[0.8517731 ], [0.66358258],
+                      [0.06054717], [0.45331369],
+                      [0.8461625 ], [0.58854979]])
+    uvi_rel = np.array([[0, 1], [2, 3], [4, 5]], dtype='int')
+    uv_rel = x_rel[uvi_rel][:,:,0]
+    y_rel = np.array([[-1], [1], [1]], dtype='int')
+    fuv_rel = np.array([[0.0043639, -0.10653237], [0.01463141, 0.05046293],
+                        [0.01773679, 0.45730181]])
+
+    x_abs = np.array([[0.43432351], [0.03362113]])
+    y_abs = np.array([[0.38966307], [0.999]])
+    mu_abs = np.array([[0.0], [0.0]])
 
     return x_rel, uvi_rel, uv_rel, y_rel, fuv_rel, x_abs, y_abs, mu_abs

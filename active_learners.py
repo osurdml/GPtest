@@ -6,7 +6,8 @@ import time
 
 
 def calc_ucb(fhat, vhat, gamma=2.0, sigma_offset=0.0):
-    return fhat + gamma * (np.sqrt(np.atleast_2d(vhat.diagonal()).T) - sigma_offset)
+    # return fhat + gamma * (np.sqrt(np.atleast_2d(vhat.diagonal()).T) - sigma_offset)
+    return fhat.flatten() + gamma * (np.sqrt(np.diagonal(vhat)) - sigma_offset)
 
 
 def softmax_selector(x, tau=1.0):
@@ -22,12 +23,7 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
         self._plus_y_obs = np.ones((1, 1), dtype='int')
         self._minus_y_obs = -1*self._plus_y_obs
 
-    def set_hyperparameters(self, log_hyp):
-        self.log_hyp = log_hyp
-
     def solve_laplace(self, log_hyp=None):
-        if log_hyp is None:
-            log_hyp = self.log_hyp
         self.f = self.calc_laplace(log_hyp)
         return self.f
 
@@ -39,11 +35,13 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
             n_rel_samples = 1
         return self.uniform_domain_sampler(n_rel_samples, domain)
 
-    def uniform_domain_sampler(self, n_samples, domain=None):
+    def uniform_domain_sampler(self, n_samples, domain=None, sortx=False):
         # Domain should be 2 x n_xdim, i.e [[x0_lo, x1_lo, ... , xn_lo], [x0_hi, x1_hi, ... , xn_hi ]]
         x_test = np.random.uniform(size=(n_samples, self._xdim))
         if domain is not None:
             x_test = x_test*np.diff(domain, axis=0) + domain[0, :]
+        if sortx:
+            x_test = np.sort(x_test, axis=0)
         return x_test
 
     def linear_domain_sampler(self, n_samples, domain=None):
@@ -78,6 +76,14 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
         return fig_p, (ax_p_l, ax_p_a, ax_p_r)
 
 
+class MaxVar(ActiveLearner):
+    # Max variance
+    def select_observation(self, domain=None, n_test=100):
+        x_test = self.uniform_domain_sampler(n_test, domain)
+        fhat, vhat = self.predict_latent(x_test)
+        return x_test[[np.argmax(np.diagonal(vhat))], :]
+
+
 class UCBLatent(ActiveLearner):
     # All absolute returns
     def select_observation(self, domain=None, n_test=100, gamma=2.0):
@@ -92,9 +98,16 @@ class UCBLatentSoftmax(ActiveLearner):
     def select_observation(self, domain=None, n_test=100, gamma=2.0, tau=1.0):
         x_test = self.uniform_domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
-        ucb = calc_ucb(fhat, vhat, gamma).flatten()
+        ucb = calc_ucb(fhat, vhat, gamma)
         return x_test[[softmax_selector(ucb, tau)], :]
 
+class UCBCovarianceSoftmax(ActiveLearner):
+    # All absolute returns
+    def select_observation(self, domain=None, n_test=100, gamma=2.0, tau=1.0):
+        x_test = self.uniform_domain_sampler(n_test, domain)
+        fhat, vhat = self.predict_latent(x_test)
+        ucb = fhat.flatten() + gamma * (vhat.sum(axis=1) ** 0.25)
+        return x_test[[softmax_selector(ucb, tau)], :]
 
 class UCBOut(ActiveLearner):
     # NOT FULLY IMPLEMENTED - BROKEN
@@ -166,7 +179,7 @@ class ExpectedImprovementRel(ExpectedImprovementAbs):
 #
 #         x_test = self.uniform_domain_sampler(n_test, domain)
 #         fhat, vhat = self.predict_latent(x_test)
-#         ucb = calc_ucb(fhat, vhat, gamma).flatten()
+#         ucb = calc_ucb(fhat, vhat, gamma)
 #         return x_test[[softmax_selector(ucb, tau)], :]
 
 class ABSThresh(ActiveLearner):
@@ -183,7 +196,7 @@ class UCBAbsRel(ActiveLearner):
     def select_observation(self, domain=None, n_test=100, p_rel=0.5, n_rel_samples=2, gamma=2.0, tau=1.0):
         x_test = self.uniform_domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
-        ucb = calc_ucb(fhat, vhat, gamma).flatten()
+        ucb = calc_ucb(fhat, vhat, gamma)
 
         if np.random.uniform() < p_rel: # i.e choose a relative sample
             best_n = [softmax_selector(ucb, tau=tau)]   #[np.argmax(ucb)]  #
@@ -193,7 +206,7 @@ class UCBAbsRel(ActiveLearner):
             while len(best_n) < n_rel_samples:
                 # ucb = ucb*sq_dist[best_n[-1], :] # Discount ucb by distance
                 ucb[best_n[-1]] = 0.0
-                ucb *= 2*p_rel_y[best_n[-1],:]*(1.0 - p_rel_y[best_n[-1],:]) # Divide by likelihood that each point is better than previous best
+                ucb *= 4*p_rel_y[best_n[-1],:]*(1.0 - p_rel_y[best_n[-1],:]) # Divide by likelihood that each point is better than previous best
                 best_n.append(softmax_selector(ucb, tau=tau))
                 # best_n.append(np.argmax(ucb))
         else:
@@ -205,7 +218,7 @@ class UCBAbsRelD(ActiveLearner):
     def select_observation(self, domain=None, n_test=100, p_rel=0.5, n_rel_samples=2, gamma=2.0, tau=1.0):
         x_test = self.uniform_domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
-        ucb = calc_ucb(fhat, vhat, gamma).flatten()
+        ucb = calc_ucb(fhat, vhat, gamma)
 
         if np.random.uniform() < p_rel: # i.e choose a relative sample
             best_n = [softmax_selector(ucb, tau=tau)]   #[np.argmax(ucb)]  #
@@ -214,11 +227,79 @@ class UCBAbsRelD(ActiveLearner):
             while len(best_n) < n_rel_samples:
                 # ucb *= sq_dist[best_n[-1], :] # Discount ucb by distance
                 ucb[best_n[-1]] = 0.0
-                ucb *= 2*p_rel_y[best_n[-1],:]*(1.0 - p_rel_y[best_n[-1],:]) # Divide by likelihood that each point is better than previous best
+                ucb *= 4*p_rel_y[best_n[-1],:]*(1.0 - p_rel_y[best_n[-1],:]) # Divide by likelihood that each point is better than previous best
                 best_n.append(softmax_selector(ucb, tau=tau))
                 #best_n.append(np.argmax(ucb))
         else:
             best_n = [softmax_selector(ucb, tau=tau/2.0)]   #[np.argmax(ucb)]  #
+        return x_test[best_n, :]
+
+class DetRelBoo(ActiveLearner):
+    def select_observation(self, domain=None, n_test=100, n_rel_samples=2, gamma=2.0, tau=1.0):
+        x_test = self.uniform_domain_sampler(n_test, domain, sortx=True)
+        fhat, vhat = self.predict_latent(x_test)
+        # ucb = calc_ucb(fhat, vhat, gamma)
+
+        # Select the first location using the mean, uncertainty and likelihood of improvement over everywhere (?) else
+        p_rel = self.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
+        pp_rel = p_rel.mean(axis=0)
+        ucb = 4*pp_rel*(1-pp_rel)*np.diagonal(vhat)**0.5 # THIS SEEMS BACKWARD!!! WHY DOES IT WORK?
+
+        available_indexes = set(range(len(x_test)))
+        dK = np.zeros(len(available_indexes))
+
+        best_n = [softmax_selector(ucb, tau=tau)]   #[np.argmax(ucb)]  #
+        uvi = self._default_uvi.copy()
+        uvi[0][0] = best_n[0]
+        while len(best_n) < n_rel_samples:
+            dK[best_n[-1]] = -1e5                   # Bit of a scam because it is still possible to sample this value
+            available_indexes.remove(best_n[-1])
+            best_n.append(-1)
+            for cn in available_indexes:
+                best_n[-1] = cn; uvi[0][1] = cn
+                K = vhat[np.ix_(best_n, best_n)]
+                # p_y = self.rel_likelihood.posterior_likelihood(fhat, vhat, uvi, y=self._plus_y_obs)
+                dK[cn] = (gamma*np.sqrt(np.linalg.det(K)) + fhat[cn]) # *p_y
+            best_n[-1] = softmax_selector(dK, tau=tau)  # np.argmax(dK) #
+        return x_test[best_n, :]
+
+class DetSelect(ActiveLearner):
+    def select_observation(self, domain=None, n_test=100, n_rel_samples=2, gamma=2.0, rel_tau=1.0, abs_tau=1.0):
+        x_test = self.uniform_domain_sampler(n_test, domain, sortx=True)
+        fhat, vhat = self.predict_latent(x_test)
+        # ucb = calc_ucb(fhat, vhat, gamma).flatten()
+
+        # Select the first location using the mean, uncertainty and likelihood of improvement over everywhere (?) else
+        p_rel = self.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
+        pp_rel = p_rel.mean(axis=0)
+        x_std = np.diagonal(vhat)**0.5
+        rel_value = 4*pp_rel*(1-pp_rel)*(x_std.max() - x_std) # fhat.flatten() + gamma*(vhat.sum(axis=1)**0.25) #
+
+        available_indexes = set(range(len(x_test)))
+        dK = np.zeros(len(available_indexes))
+        best_n = [softmax_selector(rel_value, tau=rel_tau)]   #[np.argmax(rel_value)]  #
+        uvi = self._default_uvi.copy()
+        uvi[0][0] = best_n[0]
+        while len(best_n) < n_rel_samples:
+            dK[best_n[-1]] = -1e5                   # Bit of a scam because it is still possible to sample this value
+            available_indexes.remove(best_n[-1])
+            best_n.append(-1)
+            for cn in available_indexes:
+                best_n[-1] = cn; uvi[0][1] = cn
+                K = vhat[np.ix_(best_n, best_n)]
+                p_y = self.rel_likelihood.posterior_likelihood(fhat, vhat, uvi, y=self._plus_y_obs)
+                dK[cn] = p_y*(gamma*np.sqrt(np.linalg.det(K)) + fhat[cn])
+            best_n[-1] = softmax_selector(dK, tau=rel_tau)  # np.argmax(dK) #
+
+        K = vhat[np.ix_(best_n, best_n)]
+        mdK = gamma*np.sqrt(np.linalg.det(K)) + fhat[cn]
+        # mdK = dK.max()
+        ucb = calc_ucb(fhat, vhat, gamma)
+        p_rel = mdK/(mdK + ucb.max())
+
+        if abs_tau > 0 and np.random.uniform() > p_rel:     # i.e choose an abs:
+            # best_n = [softmax_selector(fhat.flatten() + gamma*(vhat.sum(axis=1)**0.25), tau)]  #[best_n[0]]   #
+            best_n = [softmax_selector(ucb, tau=abs_tau)]
         return x_test[best_n, :]
 
 
@@ -337,22 +418,21 @@ class LikelihoodImprovement(PeakComparitor):
 
 
 class SampledThreshold(PeakComparitor):
-    # TODO: FINISH IMPLEMENTATION
 
     def calculate_threshold_utility(self, fhat, vhat, n_samples, y_threshold):
-        y_post = self.sample_latent_posterior(fhat, vhat, n_samples = n_samples)
+        f_sampled = self.sample_latent_posterior(fhat, vhat, n_samples = n_samples)
         threshold_utility = 0.0
         # For each one, evaluate the probability mass above the threshold in the absolute function
-        for yi in y_post:
-            threshold_utility += self.point_utility(yi, y_threshold)
+        for fs in f_sampled:
+            threshold_utility += self.point_utility(fhat, fs, y_threshold)
         return threshold_utility/n_samples
 
-    def point_utility(self, f, y_threshold):
+    def point_utility(self, fhat, fs, y_threshold):
         # This is the mean probability mass above the threshold value
         pmass = 0.0
-        for fi in f:
+        for fi in fs:
             pmass += 1.0 - self.abs_likelihood.cdf(y_threshold, fi)
-        return pmass/f.shape[0]
+        return pmass/fs.shape[0]
 
     def test_observation(self, x, y, uvi, x_test, n_samples, y_threshold, f = None):
         self.add_observations(x, y, uvi, keep_f=True)
@@ -363,11 +443,14 @@ class SampledThreshold(PeakComparitor):
         return util
 
     def select_observation(self, domain=None, x_test=None, n_test=50, n_samples=50, y_threshold=0.8, p_pref_tol=1e-3, n_mc_abs=5):
+        # n_test is the number of test point locations on the input function
+        # n_samples is the number of functions sampled from the posterior for estimating the utility
+        # n_mc_abs is the number of proposed observations sampled from the current posterior for absolute estimates
         # Generate a set of test points in the domain (if not specified)
         if x_test is None:
             # x_test = self.linear_domain_sampler(n_test, domain)
             x_test = self.uniform_domain_sampler(n_test, domain)
-            x_test.sort(axis=0)
+            # x_test.sort(axis=0)
         n_test = len(x_test)
 
         # Sample a set of functions from the current posterior
@@ -385,38 +468,48 @@ class SampledThreshold(PeakComparitor):
 
         self.store_observations()
 
+        # Relative observations
         t_rel = time.time()
         # Now calculate the expected value for each observation pair
         for i, uv in enumerate(uvi):
             x = x_test[uv]
             V_rel = 0.0
-            if p_pref[i] < p_pref_tol:
-                V_rel += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
-            elif p_pref[i] > 1.0-p_pref_tol:
-                V_rel += p_pref[i]*self.test_observation(x, self._minus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
-            else:
-                V_rel += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
-                V_rel += p_pref[i] * self.test_observation(x, self._minus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
-            if V_rel >= V_max_rel:
-                V_max_rel = V_rel
-                x_best_rel = x
+            try:
+                if p_pref[i] < p_pref_tol:
+                    V_rel += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+                elif p_pref[i] > 1.0-p_pref_tol:
+                    V_rel += p_pref[i]*self.test_observation(x, self._minus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+                else:
+                    V_rel += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+                    V_rel += p_pref[i] * self.test_observation(x, self._minus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+                if V_rel >= V_max_rel:
+                    V_max_rel = V_rel
+                    x_best_rel = x
+            except GPpref.LaplaceException as exc:
+                print "Failed in relative test observation, x = [{0}, {1}]".format(x[0], x[1])
+                raise exc
 
         # best_n = np.argpartition(V, -n_comparators)[-n_comparators:]
         # best = np.argmax(V)
         if self.verbose:
             print 'V_max_rel = {0}, x = {2}, t = {1}s'.format(V_max_rel[0], time.time()-t_rel, x_best_rel[:,0])
 
+        # Absolute queries
         V_max = 0.0
         t_rel = time.time()
         for i, x in enumerate(x_test):
             F = fhat[i] + np.random.randn(n_mc_abs)*np.sqrt(vhat[i,i])
             Y, mu = self.abs_likelihood.generate_samples(F)
             V_abs = 0.0
+            Y = np.clip(Y, 1e-2, 1-1e-2) # I had stability problems in Laplace with values approaching 0 or 1
             for y in Y:
                 try:
                     V_abs += self.test_observation(x, y, None, x_test, n_samples, y_threshold, f=flap)
                 except ValueError:
                     print "NaN Issue"
+                except GPpref.LaplaceException as exc:
+                    print "Failed in absolute test observation, x = {0}, y = {1}".format(x, y)
+                    raise exc
             V_abs /= n_mc_abs
             if V_abs > V_max:
                 V_max = V_abs
@@ -431,16 +524,18 @@ class SampledThreshold(PeakComparitor):
 
 
 class SampledClassification(SampledThreshold):
-    def point_utility(self, f, y_threshold):
+    def calculate_threshold_utility(self, fhat, vhat, n_samples, y_threshold):
         # Class accuracy
-        # Note this assumes the sampled functions are actual functions (not the actual gaussian posterior distribution,
-        # which might be a good alternative, but it isn't this method)
-        fm = self.abs_likelihood.mean_link(f)
-        fa = self.abs_likelihood.v * fm
-        fb = self.abs_likelihood.v - fa
-        P_below = GPpref.beta.cdf(y_threshold, fa, fb)
+        # Note this assumes the sampled functions are used to make the classification decision, and we calculate the
+        # probability mass from the current mean estimate above the threshold
+        P_below = self.abs_likelihood.cdf(y_threshold, fhat)
 
-        predict_below = fm < y_threshold
-        predicted_accuracy = P_below[predict_below].sum() + (1.0 - P_below[~predict_below]).sum()
-
-        return predicted_accuracy/len(f)
+        f_sampled = self.sample_latent_posterior(fhat, vhat, n_samples=n_samples)
+        threshold_utility = 0.0
+        # For each one, evaluate the probability mass above the threshold in the absolute function
+        for fs in f_sampled:
+            fm = self.abs_likelihood.mean_link(fs)
+            predict_below = fm < y_threshold
+            predicted_accuracy = P_below[predict_below].sum() + (1.0 - P_below[~predict_below]).sum()
+            threshold_utility += predicted_accuracy/len(fhat)
+        return threshold_utility/n_samples
