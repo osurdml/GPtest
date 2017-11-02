@@ -23,9 +23,9 @@ try:
 except KeyError:
     np.random.seed(0)
 
-n_rel_train = 5
-n_abs_train = 5
-n_queries = 1
+n_rel_train = 0
+n_abs_train = 1
+n_queries = 50
 
 delta_f = 1e-5
 
@@ -93,11 +93,14 @@ GP_kwargs = {'x_rel':x_rel, 'uvi_rel':uvi_rel, 'x_abs':x_abs,  'y_rel':y_rel, 'y
 # learner = active_learners.SampledClassification(verbose=verbose, **GP_kwargs)
 # obs_arguments = {'n_test':50, 'n_samples':20, 'y_threshold':0.7, 'p_pref_tol':1e-3, 'n_mc_abs':50}
 
-learner = active_learners.DetSelect(**GP_kwargs)
-obs_arguments = {'n_test': 100, 'n_rel_samples': 5, 'gamma': 2.0, 'tau': 0.5}
+# learner = active_learners.DetSelect(**GP_kwargs)
+# obs_arguments = {'n_test': 100, 'n_rel_samples': 5, 'gamma': 2.0, 'tau': 0.5}
 
 # learner = active_learners.ActiveLearner(**GP_kwargs)
 # obs_arguments =  {'p_rel':0.0, 'n_rel_samples': 5}
+
+learner = active_learners.MaxVar(**GP_kwargs)
+obs_arguments = {'n_rel_samples': 5, 'p_rel': -1, 'rel_tau': 0.01, 'abs_tau': 0.01}
 
 # Get initial solution
 learner.set_hyperparameters(log_hyp)

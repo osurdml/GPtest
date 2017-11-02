@@ -86,7 +86,13 @@ def plot_results(wrms_results, true_pos_results, selected_error, obs_array, rela
     plt.show()
     return f
 
-def load_data(data_dir):
+def load_data(data_dir=None):
+    if data_dir is None:
+        Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
+        data_dir = askdirectory(initialdir='./data/')
+    if data_dir == '':  # Cancel clicked
+        raise IOError('No directory selected')
+
     with open(data_dir+'/wrms.pkl', 'rb') as fh:
         wrms_results = pickle.load(fh) # Dimensions n_learners, n_queries+1, n_trials
 
@@ -99,13 +105,6 @@ def load_data(data_dir):
     with open(data_dir+'/obs.pkl', 'rb') as fh:
         obs_array = pickle.load(fh)
 
-    return wrms_results, true_pos_results, selected_error, obs_array
-
-def load_and_plot(save_plots=True, *args, **kwargs):
-    Tk().withdraw() # we don't want a full GUI, so keep the root window from appearing
-    data_dir = askdirectory(initialdir='./data/') # open folder GUI
-
-    wrms_results, true_pos_results, selected_error, obs_array = load_data(data_dir)
     try:
         with open(data_dir + '/relative_error.pkl', 'rb') as fh:
             relative_error = pickle.load(fh)
@@ -113,11 +112,46 @@ def load_and_plot(save_plots=True, *args, **kwargs):
         print "No relative error data found."
         relative_error = None
 
-    if not save_plots:
+    return wrms_results, true_pos_results, selected_error, obs_array, relative_error
+
+
+def load_and_plot(save_plots=True, *args, **kwargs):
+    Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
+    data_dir = askdirectory(initialdir='./data/')
+    if data_dir == '': return None     # Cancel clicked
+    wrms_results, true_pos_results, selected_error, obs_array, relative_error = load_data(data_dir)
+
+    if save_plots is False:
         data_dir = None
     hf = plot_results(wrms_results, true_pos_results, selected_error, obs_array, data_dir=data_dir, relative_error=relative_error, *args, **kwargs)
     plt.show()
     return hf
+
+def get_selection():
+    wrms, true_pos, sel_err, obs, rel_err = load_data()
+    print "The following models were found:"
+    for i, obs_item in enumerate(obs):
+        print "{0}: {1}".format(i, obs_item['name'])
+    dex = input('Select desired models by index as an array: ')
+    wrms, true_pos, sel_err = wrms[dex, :, :], true_pos[dex, :, :], sel_err[dex, :, :]
+    if rel_err is not None:
+        rel_err = rel_err[dex, :, :]
+    obs = [obs[i] for i in dex]
+    finished = input('Finished? (0/1)')
+    return wrms, true_pos, sel_err, obs, rel_err, finished
+
+
+def load_multiple(*args, **kwargs):
+    wrms, true_pos, sel_err, obs, rel_err, finished = get_selection()
+    app = lambda a, b: np.append(a, b, axis=0)
+    while not finished:
+        wrms2, true_pos2, sel_err2, obs2, rel_err2, finished = get_selection()
+        wrms, true_pos, sel_err = app(wrms, wrms2), app(true_pos, true_pos2), app(sel_err, sel_err2)
+        if rel_err is not None: rel_err = app(rel_err, rel_err2)
+        obs.extend(obs2)
+    hf = plot_results(wrms, true_pos, sel_err, obs, relative_error=rel_err, *args, **kwargs)
+    plt.show()
+    return hf, wrms, true_pos, sel_err, obs, rel_err
 
 if __name__ == "__main__":
     hf = load_and_plot(save_plots=False, bars=True)

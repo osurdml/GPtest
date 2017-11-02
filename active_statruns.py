@@ -12,10 +12,11 @@ import yaml
 np.set_printoptions(precision=3)
 
 class Learner(object):
-    def __init__(self, model_type, obs_arguments, name):
-        self.model_type = getattr(active_learners, self.model_type)
-        self.obs_arguments = obs_arguments
+    def __init__(self, model_type, obs_args, name, update_p_rel = False):
+        self.model_type = getattr(active_learners, model_type)
+        self.obs_arguments = obs_args
         self.name = name
+        self.update_p_rel = update_p_rel
 
     def build_model(self, training_data):
         self.model = self.model_type(**training_data)
@@ -23,75 +24,49 @@ class Learner(object):
 now_time = time.strftime("%Y_%m_%d-%H_%M")
 
 with open('./data/statruns2_oct2017.yaml', 'rt') as fh:
-    statrun_params = yaml.safe_load(fh)
+    run_parameters = yaml.safe_load(fh)
 
-log_hyp = np.log(statrun_params['hyperparameters'])
+log_hyp = np.log(run_parameters['hyperparameters'])
 
 # Statrun parameters
-np.random.seed(statrun_params['statrun_params']['randseed'])
-n_rel_train = statrun_params['statrun_params']['n_rel_train']
-n_abs_train = statrun_params['statrun_params']['n_abs_train']
-n_xtest = statrun_params['statrun_params']['n_xtest']
-n_best_points = statrun_params['statrun_params']['n_best_points']
-n_trials = statrun_params['statrun_params']['n_trials']
-n_queries = statrun_params['statrun_params']['n_queries']
-if 'calc_relative_error' in statrun_params['statrun_params']:
-    calc_relative_error = statrun_params['statrun_params']['calc_relative_error']
+statrun_params = run_parameters['statrun_params']
+np.random.seed(statrun_params['randseed'])
+n_best_points = statrun_params['n_best_points']
+n_trials = statrun_params['n_trials']
+n_queries = statrun_params['n_queries']
+if 'calc_relative_error' in run_parameters['statrun_params']:
+    calc_relative_error = statrun_params['calc_relative_error']
 else:
     calc_relative_error = False
 
 # Learner parameters
-n_rel_samples = statrun_params['learner_params']['n_rel_samples']
-delta_f = statrun_params['learner_params']['delta_f']
-
+n_rel_samples = run_parameters['learner_params']['n_rel_samples']
 
 # Define polynomial function to be modelled
-random_wave  = test_data.MultiWave(**statrun_params['wave_params'])
+random_wave  = test_data.MultiWave(**run_parameters['wave_params'])
 
 now_time = time.strftime("%Y_%m_%d-%H_%M")
 data_dir = 'data/' + now_time + '/'
 ptt.ensure_dir(data_dir)
 print "Data will be saved to: {0}".format(data_dir)
 waver = test_data.WaveSaver(n_trials, random_wave.n_components)
-with open(data_dir + 'params.yaml', 'wt') as fh:
-    yaml.safe_dump(statrun_params, fh)
+
 
 # True function
-x_plot = np.linspace(0.0, 1.0, n_xtest,dtype='float')
+x_plot = np.linspace(0.0, 1.0, statrun_params['n_xtest'], dtype='float')
 x_test = np.atleast_2d(x_plot).T
 
-# Learners
+# Construct active learner objects
+n_learners = len(run_parameters['learners'])
 learners = []
-for l in statrun_params['learners']:
+names = []
+obs_array = []
+for l in run_parameters['learners']:
+    if 'n_rel_samples' in l['obs_args']:
+        l['obs_args']['n_rel_samples'] = n_rel_samples
     learners.append(Learner(**l))
-
-# Construct active learner object
-learners = [Learner(active_learners.ActiveLearner, {'p_rel': 1.0, 'n_rel_samples': n_rel_samples},  'Random (rel)'),
-            Learner(active_learners.ActiveLearner, {'p_rel': 0.0, 'n_rel_samples': n_rel_samples},  'Random (abs)'),
-            Learner(active_learners.ActiveLearner, {'p_rel': 0.5, 'n_rel_samples': n_rel_samples},  'Random ($p_{rel}=0.5$)'),
-            Learner(active_learners.MaxVar, {'n_test': 100},  'MaxVar (abs)'),
-            Learner(active_learners.UCBLatent, {'gamma': 3.0, 'n_test': 100},  'UCB (abs)'),
-            Learner(active_learners.UCBLatentSoftmax, {'gamma': 2.0, 'n_test': 100, 'tau':1.0},  'UCBSoft (abs)'),
-            Learner(active_learners.UCBCovarianceSoftmax, {'gamma': 2.0, 'n_test': 100},  'UCBCovSoft (abs)'),
-            Learner(active_learners.DetRelBoo, {'n_test': 100, 'n_rel_samples': n_rel_samples, 'gamma': 2.0, 'tau': 0.5}, 'DetRelBoo (rel)'),
-            Learner(active_learners.DetSelect, {'n_test': 100, 'n_rel_samples': n_rel_samples, 'gamma': 2.0, 'abs_tau': -1, 'rel_tau': 1.0e-5}, 'DetSelectRel (rel)'),
-            Learner(active_learners.DetSelect, {'n_test': 100, 'n_rel_samples': n_rel_samples, 'gamma': 2.0, 'abs_tau': 1.0e-5, 'rel_tau': 1.0e-5}, 'DetSelectGreedy (rel, abs)'),
-            Learner(active_learners.DetSelect, {'n_test': 100, 'n_rel_samples': n_rel_samples, 'gamma': 2.0, 'abs_tau': 0.5, 'rel_tau': 0.5}, 'DetSelectSoft (rel, abs)'),
-            Learner(active_learners.ExpectedImprovementAbs, { 'n_test': 100 }, 'EI (Abs)'),
-            Learner(active_learners.ExpectedImprovementRel, { 'n_test': 100 }, 'EI (Rel)'),
-            Learner(active_learners.UCBAbsRel, { 'n_test': 100, 'n_rel_samples': n_rel_samples, 'gamma': 2.0, 'tau': 1.0}, 'UCBCombined (rel, abs)'),
-            # Learner(active_learners.UCBAbsRelD, { 'n_test': 100, 'n_rel_samples': n_rel_samples, 'gamma': 2.0, 'tau': 1.0}, 'UCBD (rel and abs)'),
-            # Learner(active_learners.ABSThresh, {'n_test': 100, 'p_thresh': 0.7}, 'ABSThresh'),
-            # Learner(active_learners.PeakComparitor, {'gamma': 2.0, 'n_test': 50, 'n_rel_samples': n_rel_samples}, 'PeakComparitor'),
-            # Learner(active_learners.LikelihoodImprovement, {'req_improvement': 0.60, 'n_test': 50, 'gamma': 2.0, 'n_rel_samples': n_rel_samples, 'p_thresh': 0.7}, 'LikelihoodImprovement'),
-            # Learner(active_learners.SampledThreshold, {'n_test':50, 'n_samples':10, 'y_threshold':0.8, 'p_pref_tol':1e-3, 'n_mc_abs':5}, 'SampledThreshold'),
-            # Learner(active_learners.SampledClassification, {'n_test':50, 'n_samples':10, 'y_threshold':0.8, 'p_pref_tol':1e-3, 'n_mc_abs':5}, 'SampledClassification'),
-            ]
-names = [l.name for l in learners]
-assert len(names) == len(learners), "Number of names does not match number of learners."
-n_learners = len(learners)
-
-obs_array = [{'name': name, 'obs': []} for name in names]
+    names.append(l['name'])
+    obs_array.append({'name': l['name'], 'obs': []})
 
 wrms_results = np.zeros((n_learners, n_queries+1, n_trials))
 true_pos_results = np.zeros((n_learners, n_queries+1, n_trials), dtype='int')
@@ -101,8 +76,10 @@ if calc_relative_error:
 else:
     relative_error = None
 
+with open(data_dir + 'params.yaml', 'wt') as fh:
+    yaml.safe_dump(run_parameters, fh)
+
 trial_number = 0
-# for trial_number in range(n_trials):
 while trial_number < n_trials:
 
     try:
@@ -110,23 +87,21 @@ while trial_number < n_trials:
         random_wave.randomize()
         random_wave.print_values()
         waver.set_vals(trial_number, *random_wave.get_values())
-        rel_obs_fun = GPpref.RelObservationSampler(random_wave.out, GPpref.PrefProbit(**statrun_params['rel_obs_params']))
-        abs_obs_fun = GPpref.AbsObservationSampler(random_wave.out, GPpref.AbsBoundProbit(**statrun_params['abs_obs_params']))
+        rel_obs_fun = GPpref.RelObservationSampler(random_wave.out, GPpref.PrefProbit(**run_parameters['rel_obs_params']))
+        abs_obs_fun = GPpref.AbsObservationSampler(random_wave.out, GPpref.AbsBoundProbit(**run_parameters['abs_obs_params']))
 
         f_true = abs_obs_fun.f(x_test)
         y_abs_true = abs_obs_fun.mean_link(x_test)
         best_points = np.argpartition(y_abs_true.flatten(), -n_best_points)[-n_best_points:]
         best_points_set = set(best_points)
-        # abs_y_samples = np.atleast_2d(np.linspace(0.01, 0.99, n_ysamples)).T
-        # p_abs_y_true = abs_obs_fun.observation_likelihood_array(x_test, abs_y_samples)
         if calc_relative_error:
             p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
 
         # Initial data
-        x_rel, uvi_rel, uv_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(n_rel_train, n_xdim=1)
-        x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(n_abs_train, n_xdim=1)
+        x_rel, uvi_rel, uv_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(statrun_params['n_rel_train'], n_xdim=1)
+        x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(statrun_params['n_abs_train'], n_xdim=1)
         training_data = {'x_rel': x_rel, 'uvi_rel': uvi_rel, 'x_abs': x_abs, 'y_rel': y_rel, 'y_abs': y_abs,
-                         'delta_f': delta_f, 'rel_likelihood': GPpref.PrefProbit(),
+                         'delta_f': run_parameters['learner_params']['delta_f'], 'rel_likelihood': GPpref.PrefProbit(),
                          'abs_likelihood': GPpref.AbsBoundProbit()}
 
         # Get initial solution
@@ -147,9 +122,13 @@ while trial_number < n_trials:
 
         for obs_num in range(n_queries):
             t0 = time.time()
-            learners[-1].obs_arguments['p_rel'] = max(0.0, (n_queries-obs_num)/float(n_queries))
+            linear_p_rel = max(0.0, (n_queries-obs_num)/float(n_queries))
 
             for nl, learner in enumerate(learners):
+                # Update p_rel for certain methods (hacky?)
+                if learner.update_p_rel:
+                    learner.obs_arguments['p_rel'] = linear_p_rel
+
                 next_x = learner.model.select_observation(**learner.obs_arguments)
                 if next_x.shape[0] == 1:
                     next_y, next_f = abs_obs_fun.generate_observations(next_x)

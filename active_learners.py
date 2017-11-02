@@ -78,11 +78,41 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
 
 class MaxVar(ActiveLearner):
     # Max variance
-    def select_observation(self, domain=None, n_test=100):
+    def select_observation(self, domain=None, n_test=100, n_rel_samples = 2, p_rel = 0.0, rel_tau = 1.0, abs_tau = 1.0e-5,w_v=1.0):
+        # If p_rel < 0 then we will select based on variance magnitude
+        if p_rel < 0.0:
+            p_select = 1.0
+        else:
+            p_select = p_rel
         x_test = self.uniform_domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
-        return x_test[[np.argmax(np.diagonal(vhat))], :]
+        vv = np.sqrt(np.diagonal(vhat))
 
+        if np.random.uniform() < p_select: # i.e choose a relative sample
+            available_indexes = set(range(len(x_test)))
+            dK = np.zeros(len(available_indexes))
+            best_n = [softmax_selector(vv, tau=rel_tau)]
+            while len(best_n) < n_rel_samples:
+                dK[best_n[-1]] = -1e5  # Bit of a scam because it is still possible to sample this value
+                available_indexes.remove(best_n[-1])
+                best_n.append(-1)
+                for cn in available_indexes:
+                    best_n[-1] = cn
+                    K = vhat[np.ix_(best_n, best_n)]
+                    dK[cn] = np.linalg.det(K)
+                best_n[-1] = softmax_selector(dK, tau=rel_tau)  # np.argmax(dK) #
+        else:
+            best_n = [softmax_selector(vv, tau=abs_tau)]   #[np.argmax(ucb)]  #
+
+        # This chooses an absolute query based on determinant
+        if p_rel < 0.0:
+            best_detK = -p_rel*np.sqrt(dK[best_n[-1]])
+            p_select = best_detK/(best_detK + vv.max())
+            # print "p_select: {0}".format(p_select)
+            if np.random.uniform() > p_select:
+            # if p_select < 0.5:
+                best_n = [softmax_selector(w_v*vv+(1.0-w_v)*fhat.flatten(), tau=abs_tau)]
+        return x_test[best_n, :]
 
 class UCBLatent(ActiveLearner):
     # All absolute returns
@@ -206,7 +236,7 @@ class UCBAbsRel(ActiveLearner):
             while len(best_n) < n_rel_samples:
                 # ucb = ucb*sq_dist[best_n[-1], :] # Discount ucb by distance
                 ucb[best_n[-1]] = 0.0
-                ucb *= 4*p_rel_y[best_n[-1],:]*(1.0 - p_rel_y[best_n[-1],:]) # Divide by likelihood that each point is better than previous best
+                ucb *= 4*p_rel_y[best_n[-1],:]*(1.0 - p_rel_y[best_n[-1],:]) # Reduce by likelihood that each point is better than previous best
                 best_n.append(softmax_selector(ucb, tau=tau))
                 # best_n.append(np.argmax(ucb))
         else:
