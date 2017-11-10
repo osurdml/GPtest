@@ -14,7 +14,7 @@ train_hyper = False
 use_test_data = False # test_data.data3 #
 verbose = 2
 
-with open('./data/mid_freq_5.yaml', 'rt') as fh:
+with open('./data/statruns_nov2017.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
 
 try:
@@ -25,7 +25,7 @@ random_wave = test_data.MultiWave(**wave['wave_params'])
 log_hyp = np.log(wave['hyperparameters'])
 
 n_rel_train = 5
-n_abs_train = 5
+n_abs_train = 15
 
 delta_f = 1e-5
 
@@ -40,7 +40,6 @@ true_function = random_wave.out
 rel_obs_fun = GPpref.RelObservationSampler(true_function, GPpref.PrefProbit(**wave['rel_obs_params']))
 abs_obs_fun = GPpref.AbsObservationSampler(true_function, GPpref.AbsBoundProbit(**wave['abs_obs_params']))
 
-# Main program
 # True function
 x_plot = np.linspace(0.0,1.0,n_xplot,dtype='float')
 x_test = np.atleast_2d(x_plot).T

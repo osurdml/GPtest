@@ -23,15 +23,39 @@ learners:
 #  - name: MaxVar (abs)
 #    model_type: MaxVar
 #    obs_args: {p_rel: 0.0}
-  - name: DetKSwitch ($p_{rel}=-5.0, \tau=0.1$) (rel, abs)
+  - name: DetKUCB ($p_{rel}=-2.0, w_v=0.8, \tau=0.1$) (rel, abs)
     model_type: MaxVar
-    obs_args: {n_rel_samples: 5, p_rel: -5.0, rel_tau: 0.1, abs_tau: 0.1}   
-  - name: DetKSwitch ($p_{rel}=-5.0, \tau=10^{-5}$) (rel, abs)
+    obs_args: {n_rel_samples: 5, p_rel: -2.0, rel_tau: 0.1, abs_tau: 0.1, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-2.0, w_v=0.8, \tau=10^{-5}$) (rel, abs)
     model_type: MaxVar
-    obs_args: {n_rel_samples: 5, p_rel: -5.0, rel_tau: 1e-5, abs_tau: 1e-5}   
-  - name: DetKUCBHard ($w_v=0.75, \tau=10^{-5}$) (rel, abs)
+    obs_args: {n_rel_samples: 5, p_rel: -2.0, rel_tau: 1.0e-5, abs_tau: 1.0e-5, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-2.0, w_v=0.8, \tau_r=10^{-5}, \tau_a=0.1$) (rel, abs)
     model_type: MaxVar
-    obs_args: {n_rel_samples: 5, p_rel: -5.0, rel_tau: 1e-5, abs_tau: 1e-5, w_v: 0.75}      
-  - name: DetKUCB ($w_v=0.75, \tau=0.1$) (rel, abs)
+    obs_args: {n_rel_samples: 5, p_rel: -2.0, rel_tau: 0.1, abs_tau: 1.0e-5, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-2.0, w_v=0.8, \tau_r=0.1, \tau_a=10^{-5}$) (rel, abs)
     model_type: MaxVar
-    obs_args: {n_rel_samples: 5, p_rel: -5.0, rel_tau: 0.1, abs_tau: 0.1, w_v: 0.75}    
+    obs_args: {n_rel_samples: 5, p_rel: -2.0, rel_tau: 0.1, abs_tau: 1.0e-5, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-5.0, w_v=0.8, \tau=0.1$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -5.0, rel_tau: 0.1, abs_tau: 0.1, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-5.0, w_v=0.8, \tau=10^{-5}$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -5.0, rel_tau: 1.0e-5, abs_tau: 1.0e-5, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-5.0, w_v=0.8, \tau_r=10^{-5}, \tau_a=0.1$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -5.0, rel_tau: 0.1, abs_tau: 1.0e-5, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-5.0, w_v=0.8, \tau_r=0.1, \tau_a=10^{-5}$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -5.0, rel_tau: 0.1, abs_tau: 1.0e-5, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-10.0, w_v=0.8, \tau=0.1$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -10.0, rel_tau: 0.1, abs_tau: 0.1, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-10.0, w_v=0.8, \tau=10^{-5}$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -10.0, rel_tau: 1.0e-5, abs_tau: 1.0e-5, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-10.0, w_v=0.8, \tau_r=10^{-5}, \tau_a=0.1$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -10.0, rel_tau: 0.1, abs_tau: 1.0e-5, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-10.0, w_v=0.8, \tau_r=0.1, \tau_a=10^{-5}$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -10.0, rel_tau: 0.1, abs_tau: 1.0e-5, w_v: 0.8}       

@@ -5,25 +5,14 @@ import GPpref
 import plot_tools as ptt
 import active_learners
 import test_data
-import pickle
 import plot_statruns
 import yaml
 
 np.set_printoptions(precision=3)
 
-class Learner(object):
-    def __init__(self, model_type, obs_args, name, update_p_rel = False):
-        self.model_type = getattr(active_learners, model_type)
-        self.obs_arguments = obs_args
-        self.name = name
-        self.update_p_rel = update_p_rel
-
-    def build_model(self, training_data):
-        self.model = self.model_type(**training_data)
-
 now_time = time.strftime("%Y_%m_%d-%H_%M")
 
-with open('./data/statruns2_oct2017.yaml', 'rt') as fh:
+with open('./data/statruns_nov2017.yaml', 'rt') as fh:
     run_parameters = yaml.safe_load(fh)
 
 log_hyp = np.log(run_parameters['hyperparameters'])
@@ -64,7 +53,7 @@ obs_array = []
 for l in run_parameters['learners']:
     if 'n_rel_samples' in l['obs_args']:
         l['obs_args']['n_rel_samples'] = n_rel_samples
-    learners.append(Learner(**l))
+    learners.append(active_learners.Learner(**l))
     names.append(l['name'])
     obs_array.append({'name': l['name'], 'obs': []})
 
@@ -167,21 +156,12 @@ while trial_number < n_trials:
         continue
 
     trial_number += 1
-    with open(data_dir+'wrms.pkl', 'wb') as fh:
-        pickle.dump(wrms_results[:,:,:trial_number], fh)
-
-    with open(data_dir+'true_pos.pkl', 'wb') as fh:
-        pickle.dump(true_pos_results[:,:,:trial_number], fh)
-
-    with open(data_dir+'selected_error.pkl', 'wb') as fh:
-        pickle.dump(selected_error[:,:,:trial_number], fh)
-
-    if calc_relative_error:
-        with open(data_dir + 'relative_error.pkl', 'wb') as fh:
-            pickle.dump(relative_error[:, :, :trial_number], fh)
-
-    with open(data_dir+'obs.pkl', 'wb') as fh:
-        pickle.dump(obs_array, fh)
+    if relative_error is not None:
+        plot_statruns.save_data(data_dir, wrms_results[:,:,:trial_number], true_pos_results[:, :, :trial_number],
+                                selected_error[:, :, :trial_number], obs_array, relative_error[:, :, :trial_number])
+    else:
+        plot_statruns.save_data(data_dir, wrms_results[:,:,:trial_number], true_pos_results[:, :, :trial_number],
+                                selected_error[:, :, :trial_number], obs_array)
 
     waver.save(data_dir+'wave_data.pkl')
 

@@ -150,6 +150,107 @@ class PrefProbit(object):
         y[fuv[:, 1] > fuv[:, 0]] = 1
         return y, fuv
 
+
+class OrdinalProbit(object):
+    def __init__(self, sigma=1.0, b=1.0, n_ordinals=5, eps=1.0e-10):
+        self.set_sigma(sigma)
+        self.set_b(b, n_ordinals)
+        self.eps = eps
+
+    def set_b(self, b, n_ordinals):
+        self.n_ordinals = n_ordinals
+        if not hasattr(b, "__len__"):
+            b = abs(b)
+            self.b = np.hstack(([-np.Inf],np.linspace(-b, b, self.n_ordinals-1), [np.Inf]))
+        elif len(b) == self.n_ordinals+1:
+            self.b = b
+        elif len(b) == self.n_ordinals-1:
+            self.b = np.hstack(([-np.Inf], b, [np.Inf]))
+        else:
+            raise ValueError('Specified b should be a scalar or vector of breakpoints')
+
+    def set_sigma(self, sigma):
+        self.sigma = sigma
+        self._isigma = 1.0/self.sigma
+        self._ivar = self._isigma**2
+
+    def print_hyperparameters(self):
+        print "Ordinal probit, {0} ordered categories.".format(self.n_ordinals),
+        print "Sigma: {0:0.2f}, b: ".format(self.sigma),
+        print self.b
+
+    def z_k(self, y, f):
+        return self._isigma*(self.b[y] - f)
+
+    def norm_pdf(self, y, f):
+        out = np.zeros(y.shape, dtype='float')
+        for i in range(out.shape[0]):
+            if y[i] != 0 and y[i] != self.n_ordinals:  # b0 = -Inf -> N(-Inf) = 0
+                z = self._isigma*(self.b[y[i]] - f[i])
+                out[i] = std_norm_pdf(z)
+        return out
+
+    def norm_cdf(self, y, f):
+        out = np.zeros(y.shape, dtype='float')
+        for i in range(out.shape[0]):
+            if y[i] == self.n_ordinals:
+                out[i] = 1.0
+            elif y[i] != 0:
+                z = self._isigma*(self.b[y[i]] - f[i])
+                out[i] = std_norm_cdf(z)
+        return out
+
+    def z_pdf(self, y, f):
+        out = np.zeros(y.shape, dtype='float')
+        for i in range(out.shape[0]):
+            if y[i] != 0 and y[i] != self.n_ordinals:  # b0 = -Inf -> N(-Inf) = 0
+                z = self._isigma*(self.b[y[i]] - f[i])
+                out[i] = z*std_norm_pdf(z)
+        return out
+
+
+    def likelihood(self, y, f):
+        return self.norm_cdf(y, f) - self.norm_cdf(y-1, f)
+
+    def log_likelihood(self, y, f):
+        return np.log(self.likelihood(y, f))
+
+    def derivatives(self, y, f):
+
+        l = self.likelihood(y, f)
+        py = np.log(l)
+
+        # First derivative - Chu and Gharamani
+        # Having issues with derivative (likelihood denominator drops to 0)
+        dpy_df = np.zeros(l.shape, dtype='float')
+        d2py_df2 = np.zeros(l.shape, dtype='float')
+        for i in range(l.shape[0]):
+            if l[i] < self.eps:
+                # l2 = self.likelihood(y[i], f[i]+self.delta_f)
+                # l0 = self.likelihood(y[i], f[i]-self.delta_f)
+                # dpy_df[i] = -(l2-l[i])/self.delta_f/l[i]      # (ln(f))' = f'/f
+                # d2py_df2[i] = (l2 - 2*l[i] + l0)/self.delta_f**2/dpy_df[i]/l[i]
+
+                if y[i] == 1:
+                    dpy_df[i] = -self._isigma*self.z_k(y[i], f[i])
+                    d2py_df2[i] = self._ivar
+                elif y[i] == self.n_ordinals:
+                    dpy_df[i] = -self._isigma*self.z_k(y[i]-1, f[i])
+                    d2py_df2[i] = self._ivar
+                else:
+                    z1 = self.z_k(y[i], f[i])
+                    z2 = self.z_k(y[i]-1, f[i])
+                    ep = np.exp(-0.5*(z1**2 - z2**2))
+                    dpy_df[i] = -self._isigma*(z1*ep-z2)/(ep - 1.0)
+                    d2py_df2[i] = self._ivar*(1.0 - (z1**2 *ep - z2**2)/(ep - 1.0)) + dpy_df[i]**2
+            else:
+                dpy_df[i] = self._isigma*(self.norm_pdf(y[i], f[i]) - self.norm_pdf(y[i]-1, f[i])) / l[i]
+                d2py_df2[i] = dpy_df[i]**2 + self._ivar*(self.z_pdf(y[i], f[i]) - self.z_pdf(y[i]-1, f[i])) / l[i]
+
+        W = np.diagflat(d2py_df2)
+        return W, dpy_df, py
+
+
 class AbsBoundProbit(object):
     def __init__(self, sigma=1.0, v=10.0):
         # v is the precision, kind of related to inverse of noise, high v is sharp distributions
@@ -203,6 +304,7 @@ class AbsBoundProbit(object):
 
         aa, bb = self.get_alpha_beta(f)
 
+        # Trouble with derivatives...
         dpy_df = self.v*self._isqrt2sig*std_norm_pdf(f*self._isqrt2sig) * (np.log(y) - np.log(1-y) - digamma(aa) + digamma(bb))
 
         Wdiag = - self.v*self._isqrt2sig*std_norm_pdf(f*self._isqrt2sig) * (

@@ -3,7 +3,7 @@ import GPpref
 from scipy.stats import beta
 import plot_tools as ptt
 import time
-
+import sys
 
 def calc_ucb(fhat, vhat, gamma=2.0, sigma_offset=0.0):
     # return fhat + gamma * (np.sqrt(np.atleast_2d(vhat.diagonal()).T) - sigma_offset)
@@ -16,6 +16,18 @@ def softmax_selector(x, tau=1.0):
     Px = ex/ex.sum()
     return np.random.choice(len(x), p=Px)
 
+class Learner(object):
+    def __init__(self, model_type, obs_args, name, update_p_rel = False):
+        self.model_type = getattr(sys.modules[__name__], model_type)
+        self.obs_arguments = obs_args
+        self.name = name
+        self.update_p_rel = update_p_rel
+
+    def build_model(self, training_data):
+        self.model = self.model_type(**training_data)
+
+    def select_observation(self):
+        return self.model.select_observation(**self.obs_arguments)
 
 class ActiveLearner(GPpref.PreferenceGaussianProcess):
     def init_extras(self):
@@ -104,13 +116,11 @@ class MaxVar(ActiveLearner):
         else:
             best_n = [softmax_selector(vv, tau=abs_tau)]   #[np.argmax(ucb)]  #
 
-        # This chooses an absolute query based on determinant
-        if p_rel < 0.0:
+        # This chooses an absolute query based on determinant. Choose relK using beta cdf likelihood
+        if p_rel <= -1.0:
             best_detK = -p_rel*np.sqrt(dK[best_n[-1]])
-            p_select = best_detK/(best_detK + vv.max())
-            # print "p_select: {0}".format(p_select)
-            if np.random.uniform() > p_select:
-            # if p_select < 0.5:
+            K_ratio = best_detK/(vv.max() + best_detK)
+            if np.random.uniform() > beta.cdf(K_ratio, -p_rel, -p_rel):
                 best_n = [softmax_selector(w_v*vv+(1.0-w_v)*fhat.flatten(), tau=abs_tau)]
         return x_test[best_n, :]
 

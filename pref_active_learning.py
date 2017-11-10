@@ -15,7 +15,7 @@ plt.rc('text', usetex=True)
 
 save_plots = False
 
-with open('./data/mid_freq_5.yaml', 'rt') as fh:
+with open('./data/statruns2_oct2017.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
 
 try:
@@ -25,7 +25,7 @@ except KeyError:
 
 n_rel_train = 0
 n_abs_train = 1
-n_queries = 50
+n_queries = 20
 
 delta_f = 1e-5
 
@@ -82,7 +82,58 @@ if save_plots:
 # Construct active learner object
 GP_kwargs = {'x_rel':x_rel, 'uvi_rel':uvi_rel, 'x_abs':x_abs,  'y_rel':y_rel, 'y_abs':y_abs, 'delta_f':delta_f,
                'rel_likelihood':GPpref.PrefProbit(), 'abs_likelihood':GPpref.AbsBoundProbit()}
+learner_kwargs = wave['learners'][0]
+learner = active_learners.Learner(**learner_kwargs)
+learner.build_model(GP_kwargs)
+learner.model.set_hyperparameters(log_hyp)
 
+# Get initial solution
+learner.model.set_hyperparameters(log_hyp)
+f = learner.model.solve_laplace()
+learner.model.print_hyperparameters()
+
+fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+                                                                abs_y_samples, mc_samples)
+if save_plots:
+    pdf_pages.savefig(fig_p, bbox_inches='tight')
+    # fig_p.savefig(fig_dir+'posterior00.pdf', bbox_inches='tight')
+
+for obs_num in range(n_queries):
+    # if 'p_rel' in obs_arguments:
+    #     obs_arguments['p_rel'] = max(0.0, (n_queries - obs_num) / float(n_queries))
+    next_x = learner.select_observation()
+    if next_x.shape[0] == 1:
+        next_y, next_f = abs_obs_fun.generate_observations(next_x)
+        learner.model.add_observations(next_x, next_y, keep_f=keep_f)
+        print 'Abs: x:{0}, y:{1}'.format(next_x[0], next_y[0])
+    else:
+        next_y, next_uvi, next_fx = rel_obs_fun.gaussian_multi_pairwise_sampler(next_x)
+        next_fuv = next_fx[next_uvi][:, :, 0]
+        fuv_rel = np.concatenate((fuv_rel, next_fuv), 0)
+        learner.model.add_observations(next_x, next_y, next_uvi, keep_f=keep_f)
+        print 'Rel: x:{0}, best_index:{1}'.format(next_x.flatten(), next_uvi[0, 1])
+
+    f = learner.model.solve_laplace()
+
+    if save_plots:
+        fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+                                                                        abs_y_samples, mc_samples)
+        pdf_pages.savefig(fig_p, bbox_inches='tight')
+        # fig_p.savefig(fig_dir+'posterior{0:02d}.pdf'.format(obs_num+1), bbox_inches='tight')
+        plt.close(fig_p)
+
+learner.model.print_hyperparameters()
+
+if save_plots:
+    pdf_pages.close()
+else:
+    fig_post, (ax_p_l, ax_p_a, ax_p_r) = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+                                                                    abs_y_samples, mc_samples)
+
+plt.show()
+print "Finished!"
+
+## SCRAP
 # learner = active_learners.UCBAbsRelD(**active_args)
 # # obs_arguments = {'req_improvement': 0.60, 'n_test': 50, 'gamma': 2.0, 'n_rel_samples': 5, 'p_thresh': 0.7}
 # obs_arguments = {'n_test': 100, 'p_rel': 0.5, 'n_rel_samples': 5, 'gamma': 2.0}
@@ -99,51 +150,5 @@ GP_kwargs = {'x_rel':x_rel, 'uvi_rel':uvi_rel, 'x_abs':x_abs,  'y_rel':y_rel, 'y
 # learner = active_learners.ActiveLearner(**GP_kwargs)
 # obs_arguments =  {'p_rel':0.0, 'n_rel_samples': 5}
 
-learner = active_learners.MaxVar(**GP_kwargs)
-obs_arguments = {'n_rel_samples': 5, 'p_rel': -1, 'rel_tau': 0.01, 'abs_tau': 0.01}
-
-# Get initial solution
-learner.set_hyperparameters(log_hyp)
-f = learner.solve_laplace()
-learner.print_hyperparameters()
-
-fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
-                                                                abs_y_samples, mc_samples)
-if save_plots:
-    pdf_pages.savefig(fig_p, bbox_inches='tight')
-    # fig_p.savefig(fig_dir+'posterior00.pdf', bbox_inches='tight')
-
-for obs_num in range(n_queries):
-    # if 'p_rel' in obs_arguments:
-    #     obs_arguments['p_rel'] = max(0.0, (n_queries - obs_num) / float(n_queries))
-    next_x = learner.select_observation(**obs_arguments)
-    if next_x.shape[0] == 1:
-        next_y, next_f = abs_obs_fun.generate_observations(next_x)
-        learner.add_observations(next_x, next_y, keep_f=keep_f)
-        print 'Abs: x:{0}, y:{1}'.format(next_x[0], next_y[0])
-    else:
-        next_y, next_uvi, next_fx = rel_obs_fun.gaussian_multi_pairwise_sampler(next_x)
-        next_fuv = next_fx[next_uvi][:, :, 0]
-        fuv_rel = np.concatenate((fuv_rel, next_fuv), 0)
-        learner.add_observations(next_x, next_y, next_uvi, keep_f=keep_f)
-        print 'Rel: x:{0}, best_index:{1}'.format(next_x.flatten(), next_uvi[0, 1])
-
-    f = learner.solve_laplace()
-
-    if save_plots:
-        fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
-                                                                        abs_y_samples, mc_samples)
-        pdf_pages.savefig(fig_p, bbox_inches='tight')
-        # fig_p.savefig(fig_dir+'posterior{0:02d}.pdf'.format(obs_num+1), bbox_inches='tight')
-        plt.close(fig_p)
-
-learner.print_hyperparameters()
-
-if save_plots:
-    pdf_pages.close()
-else:
-    fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
-                                                                    abs_y_samples, mc_samples)
-
-plt.show()
-print "Finished!"
+# learner = active_learners.MaxVar(**GP_kwargs)
+# obs_arguments = {'n_rel_samples': 5, 'p_rel': -10.0, 'rel_tau': 0.1, 'abs_tau': 0.1}
