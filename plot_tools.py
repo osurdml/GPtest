@@ -48,7 +48,7 @@ def plot_setup_rel(t_l = r'Latent function, $f(x)$', t_r = r'Relative likelihood
     ax_r.set_ylabel('$x_1$')
     return fig, (ax_l, ax_r)
 
-def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(u | f(x))$',
+def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(y | f(x))$',
                   t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$'):
 
     fig, (ax_l, ax_a, ax_r) = plt.subplots(1, 3)
@@ -62,7 +62,7 @@ def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood,
     # Absolute likelihood
     ax_a.set_title(t_a)
     ax_a.set_xlabel('$x$')
-    ax_a.set_ylabel('$u$')
+    ax_a.set_ylabel('$y$')
 
     # Relative likelihood
     ax_r.set_title(t_r)
@@ -78,8 +78,7 @@ def plot_relative_likelihood(ax, p_y, extent):
     ax.get_figure().colorbar(h_p, ax=ax)
     return h_p
 
-
-def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
+def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train=None, ya_train=None, uvr_train=None, fuvr_train=None, yr_train=None,
                class_icons=['ko', 'wo'], marker_options={'mec':'k', 'mew':0.5}, *args, **kwargs):
 
 
@@ -90,18 +89,20 @@ def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train, ya_tr
     plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])
 
     # True absolute likelihood
-    abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0], y_samples[-1, 0]]
-    h_pat = ax_a.imshow(p_a_y, origin='lower', extent=abs_extent)
-    if xa_train.shape[0] > 0:
+    dely = y_samples[1, 0] - y_samples[0, 0]
+    abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0] - 0.5*dely, y_samples[-1, 0] + 0.5*dely]
+    h_pat = ax_a.imshow(p_a_y, origin='lower', extent=abs_extent, aspect='auto')
+    if xa_train is not None and xa_train.shape[0] > 0:
         ax_a.plot(xa_train, ya_train, 'w+')
     h_yt, = ax_a.plot(xt, mu_t, c=lines[0])
-    ax_a.legend([h_yt], ['$E[u]$'])
+    ax_a.legend([h_yt], ['$E[y]$'])
+    ax_a.set_xlim(xt[0], xt[-1])
     fig.colorbar(h_pat, ax=ax_a)
 
     # True relative likelihood
     rel_y_extent = [xt[0, 0], xt[-1, 0], xt[0, 0], xt[-1, 0]]
     h_prt = plot_relative_likelihood(ax_r, p_r_y, extent=rel_y_extent)
-    if xt.shape[0] > 0:
+    if uvr_train is not None and xt.shape[0] > 0:
         for uv, fuv, y in zip(uvr_train, fuvr_train, yr_train):
             ax_r.plot(uv[0], uv[1], class_icons[(y[0] + 1) / 2], **marker_options)
             ax_l.plot(uv, fuv, 'b-', color=lighten(lines[0]))
@@ -149,14 +150,16 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     ax_l.legend([hf, hf_hat], [r'True latent function, $f(x)$', r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
 
     # Absolute posterior likelihood
-    abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0], y_samples[-1, 0]]
-    h_pap = ax_a.imshow(p_a_y, origin='lower', extent=abs_extent)
+    dely = y_samples[1, 0]-y_samples[0, 0]
+    abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0]-0.5*dely, y_samples[-1, 0]+0.5*dely]
+    h_pap = ax_a.imshow(p_a_y, origin='lower', extent=abs_extent, aspect='auto')
     h_yt, = ax_a.plot(xt, mu_t, c=lines[0])
     hEy, = ax_a.plot(xt, E_y, color=lines[3])
     if xa_train.shape[0] > 0:
         ax_a.plot(xa_train, ya_train, 'w+')
+    ax_a.set_xlim(xt[0], xt[-1])
     ax_a.legend([h_yt, hEy],
-                  [r'True mean, $E[u]$', r'Posterior mean, $E_{p(u|\mathcal{Y})}\left[u\right]$'])
+                  [r'True mean, $E[y]$', r'Posterior mean, $E_{p(y|\mathcal{Y})}\left[y\right]$'])
     fig.colorbar(h_pap, ax=ax_a)
 
     # Relative posterior likelihood

@@ -5,6 +5,7 @@ import GPy
 from scipy.special import digamma, polygamma
 from scipy.stats import norm, beta
 from scipy.linalg import block_diag
+import sys
 
 class LaplaceException(Exception):
     pass
@@ -73,9 +74,16 @@ class SquaredExponential(object):
         return Kxz
 
 class PrefProbit(object):
+    type = 'preference'
+    y_type = 'discrete'
+    y_list = np.array([-1, 1], dtype='int')
+
     def __init__(self, sigma=1.0):
-        self.set_sigma(sigma)
+        self.set_hyper([sigma])
         self.log2pi = np.log(2.0*np.pi)
+
+    def set_hyper(self, hyper):
+        self.set_sigma(hyper[0])
 
     def set_sigma(self, sigma):
         self.sigma = sigma
@@ -152,13 +160,20 @@ class PrefProbit(object):
 
 
 class OrdinalProbit(object):
-    def __init__(self, sigma=1.0, b=1.0, n_ordinals=5, eps=1.0e-10):
-        self.set_sigma(sigma)
-        self.set_b(b, n_ordinals)
-        self.eps = eps
+    type = 'categorical'
+    y_type = 'discrete'
 
-    def set_b(self, b, n_ordinals):
-        self.n_ordinals = n_ordinals
+    def __init__(self, sigma=1.0, b=1.0, n_ordinals=5, eps=1.0e-10):
+        self.n_ordinals=n_ordinals
+        self.set_hyper([sigma, b])
+        self.eps = eps
+        self.y_list = np.atleast_2d(np.arange(1, self.n_ordinals+1, 1, dtype='int')).T
+
+    def set_hyper(self, hyper):
+        self.set_sigma(hyper[0])
+        self.set_b(hyper[1])
+
+    def set_b(self, b):
         if not hasattr(b, "__len__"):
             b = abs(b)
             self.b = np.hstack(([-np.Inf],np.linspace(-b, b, self.n_ordinals-1), [np.Inf]))
@@ -183,6 +198,7 @@ class OrdinalProbit(object):
         return self._isigma*(self.b[y] - f)
 
     def norm_pdf(self, y, f):
+        f = f*np.ones(y.shape, dtype='float')       # This ensures the number of f values matches the number of y
         out = np.zeros(y.shape, dtype='float')
         for i in range(out.shape[0]):
             if y[i] != 0 and y[i] != self.n_ordinals:  # b0 = -Inf -> N(-Inf) = 0
@@ -190,17 +206,20 @@ class OrdinalProbit(object):
                 out[i] = std_norm_pdf(z)
         return out
 
-    def norm_cdf(self, y, f):
+    def norm_cdf(self, y, f, var_x=0.0):
+        ivar = self._isigma + var_x
+        f = f*np.ones(y.shape, dtype='float')
         out = np.zeros(y.shape, dtype='float')
         for i in range(out.shape[0]):
-            if y[i] == self.n_ordinals:
+            if y[i][0] == self.n_ordinals:
                 out[i] = 1.0
-            elif y[i] != 0:
-                z = self._isigma*(self.b[y[i]] - f[i])
+            elif y[i][0] != 0:
+                z = ivar*(self.b[y[i]] - f[i])
                 out[i] = std_norm_cdf(z)
         return out
 
     def z_pdf(self, y, f):
+        f = f*np.ones(y.shape, dtype='float')
         out = np.zeros(y.shape, dtype='float')
         for i in range(out.shape[0]):
             if y[i] != 0 and y[i] != self.n_ordinals:  # b0 = -Inf -> N(-Inf) = 0
@@ -232,34 +251,74 @@ class OrdinalProbit(object):
                 # d2py_df2[i] = (l2 - 2*l[i] + l0)/self.delta_f**2/dpy_df[i]/l[i]
 
                 if y[i] == 1:
-                    dpy_df[i] = -self._isigma*self.z_k(y[i], f[i])
-                    d2py_df2[i] = self._ivar
+                    dpy_df[i] = self._isigma*self.z_k(y[i], f[i])
+                    d2py_df2[i] = -self._ivar
                 elif y[i] == self.n_ordinals:
-                    dpy_df[i] = -self._isigma*self.z_k(y[i]-1, f[i])
-                    d2py_df2[i] = self._ivar
+                    dpy_df[i] = self._isigma*self.z_k(y[i]-1, f[i])
+                    d2py_df2[i] = -self._ivar
                 else:
                     z1 = self.z_k(y[i], f[i])
                     z2 = self.z_k(y[i]-1, f[i])
                     ep = np.exp(-0.5*(z1**2 - z2**2))
-                    dpy_df[i] = -self._isigma*(z1*ep-z2)/(ep - 1.0)
-                    d2py_df2[i] = self._ivar*(1.0 - (z1**2 *ep - z2**2)/(ep - 1.0)) + dpy_df[i]**2
+                    dpy_df[i] = self._isigma*(z1*ep-z2)/(ep - 1.0)
+                    d2py_df2[i] = -(self._ivar*(1.0 - (z1**2 *ep - z2**2)/(ep - 1.0)) + dpy_df[i]**2)
             else:
-                dpy_df[i] = self._isigma*(self.norm_pdf(y[i], f[i]) - self.norm_pdf(y[i]-1, f[i])) / l[i]
-                d2py_df2[i] = dpy_df[i]**2 + self._ivar*(self.z_pdf(y[i], f[i]) - self.z_pdf(y[i]-1, f[i])) / l[i]
+                dpy_df[i] = -self._isigma*(self.norm_pdf(y[i], f[i]) - self.norm_pdf(y[i]-1, f[i])) / l[i]
+                d2py_df2[i] = -(dpy_df[i]**2 + self._ivar*(self.z_pdf(y[i], f[i]) - self.z_pdf(y[i]-1, f[i])) / l[i])
 
-        W = np.diagflat(d2py_df2)
+        W = np.diagflat(-d2py_df2)
         return W, dpy_df, py
+
+    def posterior_likelihood(self, fhat, var_star, y=None):
+        if y is None:
+            y = self.y_list
+        py = np.zeros((len(y), len(fhat)), dtype='float')
+        mu = np.zeros(fhat.shape, dtype='float')
+        for i, (f, v) in enumerate(zip(fhat, var_star.diagonal())):
+            py[:,[i]] = self.norm_cdf(y, f, v) - self.norm_cdf(y-1, f, v)
+            mu[i] = (py[:,[i]]*y).sum()
+        if len(y) != self.n_ordinals or any(y != self.y_list):
+            print "Specified y vector is not full ordinal set."
+            mu = self.posterior_mean(fhat, var_star)
+        return py, mu
+
+    def posterior_mean(self, fhat, var_star):
+        py, mu = self.posterior_likelihood(fhat, var_star)
+        return mu
+
+    def mean_link(self, f):
+        mu = np.zeros(f.shape, dtype='float')
+        for i in range(f.shape[0]):
+            py = self.likelihood(self.y_list, f[i])
+            mu[i] = (py*self.y_list).sum()       # Expected value, first moment
+        return mu
+
+    def generate_samples(self, f):
+        z = np.zeros(f.shape, dtype='int')
+        mu = np.zeros(f.shape, dtype='float')
+        for i in range(f.shape[0]):
+            py = self.likelihood(self.y_list, f[i])
+            mu[i] = (py*self.y_list).sum()       # Expected value, first moment
+            z[i] = np.sum(np.random.uniform() > py.cumsum())+1
+        return z, mu
 
 
 class AbsBoundProbit(object):
+    type = 'bounded continuous'
+    y_type = 'bounded'
+    y_list = np.linspace(0.01, 0.99, 101)
+
     def __init__(self, sigma=1.0, v=10.0):
         # v is the precision, kind of related to inverse of noise, high v is sharp distributions
         # sigma is the slope of the probit, basically scales how far away from 
         # 0 the latent has to be to to move away from 0.5 output. Sigma should 
         # basically relate to the range of the latent function
-        self.set_sigma(sigma)
-        self.set_v(v)
+        self.set_hyper([sigma, v])
         self.log2pi = np.log(2.0*np.pi)
+
+    def set_hyper(self, hyper):
+        self.set_sigma(hyper[0])
+        self.set_v(hyper[1])
 
     def set_sigma(self, sigma):
         self.sigma = sigma
@@ -317,9 +376,25 @@ class AbsBoundProbit(object):
 
         return -W, dpy_df, py
 
+    def posterior_likelihood(self, fhat, varhat, y=None, normal_samples=None): # This is MC sampled due to no closed_form solution
+        if normal_samples is None:
+            normal_samples = np.random.normal(size=1000)
+        iny = 1.0/len(normal_samples)
+
+        if y is None:
+            y = self.y_list
+
+        # Sampling from posterior to show likelihoods
+        p_y = np.zeros((len(y), fhat.shape[0]))
+        for i, (fstar, vstar) in enumerate(zip(fhat, varhat.diagonal())):
+            f_samples = normal_samples * vstar + fstar
+            p_y[:, i] = [iny * np.sum(self.likelihood(yj, f_samples)) for yj in y]
+        return p_y, self.posterior_mean(fhat, varhat)
+
     def posterior_mean(self, fhat, var_star):
         #mu_t = self.mean_link(fhat)
-        E_x = np.clip(std_norm_cdf(fhat/(np.sqrt(2*self.sigma**2 + var_star))), 1e-12, 1.0-1e-12)
+        vv = np.atleast_2d(var_star.diagonal()).T
+        E_x = np.clip(std_norm_cdf(fhat/(np.sqrt(2*self.sigma**2 + vv))), 1e-12, 1.0-1e-12)
         return E_x
 
     def generate_samples(self, f):
@@ -333,23 +408,30 @@ class AbsBoundProbit(object):
 
 class PreferenceGaussianProcess(object):
 
-    def __init__(self, x_rel, uvi_rel, x_abs, y_rel, y_abs, rel_likelihood=PrefProbit(), delta_f=1e-6,
-                 abs_likelihood=AbsBoundProbit(), verbose=False):
+    def __init__(self, x_rel, uvi_rel, x_abs, y_rel, y_abs, rel_likelihood='PrefProbit', delta_f=1.0e-5,
+                 abs_likelihood='AbsBoundProbit', verbose=False, hyper_counts=[2, 1, 2]):
+        # hyperparameters are split by hyper_counts, where hyper_counts should contain three integers > 0, the first is
+        # the number of hypers in the GP covariance, second is the number in the relative likelihood, last is the number
+        # in the absolute likelihood. hyper_counts.sum() should be equal to len(log_hyp)
         # log_hyp are log of hyperparameters, note that it is [length_0, ..., length_d, sigma_f, sigma_probit, v_beta]
+
         # Training points are split into relative and absolute for calculating f, but combined for predictions.  
         self.set_observations(x_rel, uvi_rel, x_abs, y_rel, y_abs)
 
         self.delta_f = delta_f
-        self.rel_likelihood = rel_likelihood
-        self.abs_likelihood = abs_likelihood
+        self.rel_likelihood = getattr(sys.modules[__name__], rel_likelihood)() # This calls the constructor from string
+        self.abs_likelihood = getattr(sys.modules[__name__], abs_likelihood)()
 
         self.verbose = verbose
 
-        self.kern = GPy.kern.RBF(self._xdim, ARD=True)
+        if self._xdim is not None:
+            self.kern = GPy.kern.RBF(self._xdim, ARD=True)
 
         self.Ix = np.eye(self._nx)
 
         self.f = None
+
+        self.hyper_counts = np.array(hyper_counts)
         self.init_extras()
 
     def init_extras(self):
@@ -361,7 +443,8 @@ class PreferenceGaussianProcess(object):
         elif x_abs.shape[0] is not 0:
             self._xdim = x_abs.shape[1]
         else:
-            raise Exception("No Input Points")
+            self._xdim = None
+            # raise Exception("No Input Points")
         self._n_rel = x_rel.shape[0]
         self._n_abs = x_abs.shape[0]
         self.x_rel = x_rel
@@ -380,6 +463,9 @@ class PreferenceGaussianProcess(object):
         # keep_f is used to reset the Laplace solution. If it's a small update, it's sometimes better to keep the old
         # values and append some 0's for the new observations (keep_f = True), otherwise it is reset (keep_f = False)
         # Default is keep_f = False
+        if self._xdim is None:
+            self._xdim = x.shape[1]
+            self.kern = GPy.kern.RBF(self._xdim, ARD=True)
         if uvi is None: # Absolute observation/s
             if keep_f:
                 self.f = np.vstack((self.f, np.zeros((x.shape[0], 1))))
@@ -395,11 +481,16 @@ class PreferenceGaussianProcess(object):
             self.set_observations(x_rel, uvi_rel, self.x_abs, y_rel, self.y_abs)
 
     def set_hyperparameters(self, loghyp):
+        assert sum(self.hyper_counts) == len(loghyp), "Sum of hyper_counts must match length of log_hyp"
+        assert self.hyper_counts[0] == self._xdim+1, "Currently only supporting sq exp covariance, hyper_counts[0] must be x_dim + 1"
         self.kern.lengthscale = np.exp(loghyp[0:self._xdim])
         self.kern.variance = 1.0 # (np.exp(loghyp[self._xdim]))**2
-        self.rel_likelihood.set_sigma(np.exp(loghyp[-3])) # Do we need different sigmas for each likelihood? Yes!
-        self.abs_likelihood.set_sigma(np.exp(loghyp[-2])) # I think this sigma relates to sigma_f in the covariance, and is actually possibly redundant
-        self.abs_likelihood.set_v(np.exp(loghyp[-1]))     # Should this relate to the rel_likelihood probit noise?
+        dex = self.hyper_counts.cumsum()
+        self.rel_likelihood.set_hyper(np.exp(loghyp[dex[0]:dex[1]]))
+        self.abs_likelihood.set_hyper(np.exp(loghyp[dex[1]:dex[2]]))
+        # self.rel_likelihood.set_sigma(np.exp(loghyp[-3])) # Do we need different sigmas for each likelihood? Yes!
+        # self.abs_likelihood.set_sigma(np.exp(loghyp[-2])) # I think this sigma relates to sigma_f in the covariance, and is actually possibly redundant
+        # self.abs_likelihood.set_v(np.exp(loghyp[-1]))     # Should this relate to the rel_likelihood probit noise?
 
     def calc_laplace(self, loghyp=None):
         if loghyp is not None:
@@ -549,25 +640,13 @@ class PreferenceGaussianProcess(object):
         p_y = self.rel_posterior_likelihood(uvi, y=1, x=x, fhat=fhat, varhat=varhat)
         return 2*np.array(p_y < 0.5, dtype='int')-1
 
-    def abs_posterior_likelihood(self, y, x=None, fhat=None, varhat=None, normal_samples = None): # Currently sample-based
+    def abs_posterior_likelihood(self, y=None, x=None, fhat=None, varhat=None, **kwargs): # Currently sample-based
         fhat, varhat = self._check_latent_input(x, fhat, varhat)
-        varhat = np.atleast_2d(varhat.diagonal()).T
-        if normal_samples is None:
-            normal_samples = np.random.normal(size=1000)
-        iny = 1.0/len(normal_samples)
-
-        # Sampling from posterior to show likelihoods
-        p_y = np.zeros((y.shape[0], fhat.shape[0]))
-        for i, (fstar, vstar) in enumerate(zip(fhat, varhat)):
-            f_samples = normal_samples * vstar + fstar
-            p_y[:, i] = [iny * np.sum(self.abs_likelihood.likelihood(yj, f_samples)) for yj in y]
-        return p_y
+        return self.abs_likelihood.posterior_likelihood(fhat, varhat, y=y, **kwargs)
 
     def abs_posterior_mean(self, x=None, fhat=None, varhat=None):
         fhat, varhat = self._check_latent_input(x, fhat, varhat)
-        varstar = np.atleast_2d(varhat.diagonal()).T
-        E_y = self.abs_likelihood.posterior_mean(fhat, varstar)
-        return E_y
+        return self.abs_likelihood.posterior_mean(fhat, varhat)
 
     def print_hyperparameters(self):
         print "COV: '{0}', l: {1}, sigma_f: {2}".format(self.kern.name, self.kern.lengthscale.values, np.sqrt(self.kern.variance.values))
@@ -578,9 +657,10 @@ class PreferenceGaussianProcess(object):
 
 
 class ObservationSampler(object):
-    def __init__(self, true_fun, likelihood_object):
+    def __init__(self, true_fun, likelihood_type, likelihood_kwargs):
         self.f = true_fun
-        self.l = likelihood_object
+        ltype = getattr(sys.modules[__name__], likelihood_type)
+        self.l = ltype(**likelihood_kwargs)
 
     def generate_observations(self, x):
         fx = self.f(x)
@@ -623,6 +703,8 @@ class AbsObservationSampler(ObservationSampler):
         y, mu = self.generate_observations(x)
         return x, y, mu
 
+    def get_y_samples(self):
+        return self.l.get_y_samples()
 
 class RelObservationSampler(ObservationSampler):
     def observation_likelihood_array(self, x, y=-1):

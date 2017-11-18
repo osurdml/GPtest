@@ -28,8 +28,7 @@ if 'calc_relative_error' in run_parameters['statrun_params']:
 else:
     calc_relative_error = False
 
-# Learner parameters
-n_rel_samples = run_parameters['learner_params']['n_rel_samples']
+n_rel_samples = run_parameters['statrun_params']['n_rel_samples']
 
 # Define polynomial function to be modelled
 random_wave  = test_data.MultiWave(**run_parameters['wave_params'])
@@ -76,8 +75,8 @@ while trial_number < n_trials:
         random_wave.randomize()
         random_wave.print_values()
         waver.set_vals(trial_number, *random_wave.get_values())
-        rel_obs_fun = GPpref.RelObservationSampler(random_wave.out, GPpref.PrefProbit(**run_parameters['rel_obs_params']))
-        abs_obs_fun = GPpref.AbsObservationSampler(random_wave.out, GPpref.AbsBoundProbit(**run_parameters['abs_obs_params']))
+        rel_obs_fun = GPpref.RelObservationSampler(random_wave.out, run_parameters['GP_params']['rel_likelihood'], run_parameters['rel_obs_params'])
+        abs_obs_fun = GPpref.AbsObservationSampler(random_wave.out, run_parameters['GP_params']['abs_likelihood'], run_parameters['abs_obs_params'])
 
         f_true = abs_obs_fun.f(x_test)
         y_abs_true = abs_obs_fun.mean_link(x_test)
@@ -89,13 +88,12 @@ while trial_number < n_trials:
         # Initial data
         x_rel, uvi_rel, uv_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(statrun_params['n_rel_train'], n_xdim=1)
         x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(statrun_params['n_abs_train'], n_xdim=1)
-        training_data = {'x_rel': x_rel, 'uvi_rel': uvi_rel, 'x_abs': x_abs, 'y_rel': y_rel, 'y_abs': y_abs,
-                         'delta_f': run_parameters['learner_params']['delta_f'], 'rel_likelihood': GPpref.PrefProbit(),
-                         'abs_likelihood': GPpref.AbsBoundProbit()}
+        model_kwargs = {'x_rel': x_rel, 'uvi_rel': uvi_rel, 'x_abs': x_abs, 'y_rel': y_rel, 'y_abs': y_abs}
+        model_kwargs.update(run_parameters['GP_params'])
 
         # Get initial solution
         for nl, learner in enumerate(learners):
-            learner.build_model(training_data)
+            learner.build_model(model_kwargs)
             learner.model.set_hyperparameters(log_hyp)
             f = learner.model.solve_laplace()
             fhat, vhat = learner.model.predict_latent(x_test)

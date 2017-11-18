@@ -14,7 +14,7 @@ train_hyper = False
 use_test_data = False # test_data.data3 #
 verbose = 2
 
-with open('./data/statruns_nov2017.yaml', 'rt') as fh:
+with open('./data/ordinal_test.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
 
 try:
@@ -24,29 +24,24 @@ except KeyError:
 random_wave = test_data.MultiWave(**wave['wave_params'])
 log_hyp = np.log(wave['hyperparameters'])
 
-n_rel_train = 5
-n_abs_train = 15
-
-delta_f = 1e-5
+n_rel_train = 10
+n_abs_train = 20
 
 n_xplot = 101
-n_mcsamples = 1000
-n_ysamples = 301
 n_posterior_samples = 3
 
 random_wave.print_values()
 true_function = random_wave.out
 
-rel_obs_fun = GPpref.RelObservationSampler(true_function, GPpref.PrefProbit(**wave['rel_obs_params']))
-abs_obs_fun = GPpref.AbsObservationSampler(true_function, GPpref.AbsBoundProbit(**wave['abs_obs_params']))
+rel_obs_fun = GPpref.RelObservationSampler(true_function, wave['GP_params']['rel_likelihood'], wave['rel_obs_params'])
+abs_obs_fun = GPpref.AbsObservationSampler(true_function, wave['GP_params']['abs_likelihood'], wave['abs_obs_params'])
 
 # True function
 x_plot = np.linspace(0.0,1.0,n_xplot,dtype='float')
 x_test = np.atleast_2d(x_plot).T
 f_true = abs_obs_fun.f(x_test)
 mu_true = abs_obs_fun.mean_link(x_test)
-mc_samples = np.random.normal(size=n_mcsamples)
-abs_y_samples = np.atleast_2d(np.linspace(0.01, 0.99, n_ysamples)).T
+abs_y_samples = abs_obs_fun.l.y_list
 p_abs_y_true = abs_obs_fun.observation_likelihood_array(x_test, abs_y_samples)
 p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
 
@@ -60,10 +55,8 @@ else:
     x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(n_abs_train)
 
 # Construct GP object
-prefGP = GPpref.PreferenceGaussianProcess(x_rel, uvi_rel, x_abs, y_rel, y_abs,
-                                          delta_f=delta_f,
-                                          rel_likelihood=GPpref.PrefProbit(),
-                                          abs_likelihood=GPpref.AbsBoundProbit(), verbose=verbose)
+wave['GP_params']['verbose'] = verbose
+prefGP = GPpref.PreferenceGaussianProcess(x_rel, uvi_rel, x_abs, y_rel, y_abs, **wave['GP_params'])
 
 prefGP.set_hyperparameters(log_hyp)
 # If training hyperparameters, use external optimiser
@@ -76,18 +69,14 @@ prefGP.print_hyperparameters()
 # Latent predictions
 fhat, vhat = prefGP.predict_latent(x_test)
 
-# Expected values
-E_y = prefGP.abs_posterior_mean(x_test, fhat, vhat)
-
-# Posterior likelihoods (MC sampled for absolute)
-p_abs_y_post = prefGP.abs_posterior_likelihood(abs_y_samples, fhat=fhat, varhat=vhat, normal_samples=mc_samples)
+# Posterior likelihoods
+p_abs_y_post, E_y = prefGP.abs_posterior_likelihood(abs_y_samples, fhat=fhat, varhat=vhat)
 p_rel_y_post = prefGP.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
 
 
 # Plot true functions
 fig_t, (ax_t_l, ax_t_a, ax_t_r) = ptt.true_plots(x_test, f_true, mu_true, wave['rel_obs_params']['sigma'],
                                                  abs_y_samples, p_abs_y_true, p_rel_y_true,
-                                                 x_abs, y_abs, uv_rel, fuv_rel, y_rel,
                                                  t_l=r'True latent function, $f(x)$')
 
 # Posterior estimates

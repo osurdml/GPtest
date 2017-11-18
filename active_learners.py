@@ -23,8 +23,8 @@ class Learner(object):
         self.name = name
         self.update_p_rel = update_p_rel
 
-    def build_model(self, training_data):
-        self.model = self.model_type(**training_data)
+    def build_model(self, model_kwargs):
+        self.model = self.model_type(**model_kwargs)
 
     def select_observation(self):
         return self.model.select_observation(**self.obs_arguments)
@@ -64,16 +64,11 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
             x_test = x_test*np.diff(domain, axis=0) + domain[0, :]
         return x_test
 
-    def create_posterior_plot(self, x_test, f_true, mu_true, rel_sigma, fuv_train, abs_y_samples, mc_samples):
+    def create_posterior_plot(self, x_test, f_true, mu_true, rel_sigma, fuv_train, abs_y_samples):
         # Latent predictions
         fhat, vhat = self.predict_latent(x_test)
 
-        # Expected values
-        E_y = self.abs_posterior_mean(x_test, fhat, vhat)
-
-        # Absolute posterior likelihood (MC sampled)
-        # Posterior likelihoods (MC sampled for absolute)
-        p_abs_y_post = self.abs_posterior_likelihood(abs_y_samples, fhat=fhat, varhat=vhat, normal_samples=mc_samples)
+        p_abs_y_post, E_y = self.abs_posterior_likelihood(abs_y_samples, fhat=fhat, varhat=vhat)
         p_rel_y_post = self.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
         x_train, uvi_train, x_abs_train, y_train, y_abs_train = self.get_observations()
         uv_train = x_train[uvi_train][:, :, 0]
@@ -89,8 +84,17 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
 
 
 class MaxVar(ActiveLearner):
+    l2pie = 1.0 + np.log(2*np.pi)
+    def logistic(self, H, n_rel):
+        L = 2.0
+        return 1.0 / (1.0 + np.exp(-L * (H-self.kern.variance)) )
+
     # Max variance
-    def select_observation(self, domain=None, n_test=100, n_rel_samples = 2, p_rel = 0.0, rel_tau = 1.0, abs_tau = 1.0e-5,w_v=1.0):
+    def select_observation(self, domain=None, n_test=100, n_rel_samples = 2, p_rel = 0.0, rel_tau = 1.0, abs_tau = 1.0e-5,w_v=1.0, selector='det'):
+        # p_rel is the likelihood of selecting a relative query
+        # tau are softmax temperatures (low is more greedy, high is more random)
+        # w_v is the UCB weighting for variance, where UCB = w_v*variance + (1-w_v)*mean
+        # det_type is the type of value used to select between
         # If p_rel < 0 then we will select based on variance magnitude
         if p_rel < 0.0:
             p_select = 1.0
@@ -100,28 +104,35 @@ class MaxVar(ActiveLearner):
         fhat, vhat = self.predict_latent(x_test)
         vv = np.sqrt(np.diagonal(vhat))
 
-        if np.random.uniform() < p_select: # i.e choose a relative sample
+        if p_select >= 1.0 or np.random.uniform() < p_select: # i.e choose a relative sample
             available_indexes = set(range(len(x_test)))
             dK = np.zeros(len(available_indexes))
             best_n = [softmax_selector(vv, tau=rel_tau)]
             while len(best_n) < n_rel_samples:
-                dK[best_n[-1]] = -1e5  # Bit of a scam because it is still possible to sample this value
+                dK[best_n[-1]] = -1.0e10  # Bit of a scam because it is still possible to sample this value
                 available_indexes.remove(best_n[-1])
                 best_n.append(-1)
                 for cn in available_indexes:
                     best_n[-1] = cn
                     K = vhat[np.ix_(best_n, best_n)]
                     dK[cn] = np.linalg.det(K)
-                best_n[-1] = softmax_selector(dK, tau=rel_tau)  # np.argmax(dK) #
+                best_n[-1] = softmax_selector(dK/dK.max(), tau=rel_tau)  # np.argmax(dK) #
         else:
-            best_n = [softmax_selector(vv, tau=abs_tau)]   #[np.argmax(ucb)]  #
+            best_n = [softmax_selector(w_v*vv+(1.0-w_v)*fhat.flatten(), tau=abs_tau)]   #[np.argmax(ucb)]  #
 
         # This chooses an absolute query based on determinant. Choose relK using beta cdf likelihood
-        if p_rel <= -1.0:
-            best_detK = -p_rel*np.sqrt(dK[best_n[-1]])
-            K_ratio = best_detK/(vv.max() + best_detK)
-            if np.random.uniform() > beta.cdf(K_ratio, -p_rel, -p_rel):
-                best_n = [softmax_selector(w_v*vv+(1.0-w_v)*fhat.flatten(), tau=abs_tau)]
+        if p_rel < 0.0:
+            best_abs = softmax_selector(w_v * vv + (1.0 - w_v) * fhat.flatten(), tau=abs_tau)
+            if selector == 'det':
+                best_detK = -p_rel*np.sqrt(dK[best_n[-1]])
+                K_ratio = best_detK/(vv.max() + best_detK)
+            elif selector == 'entropy':
+                H_rel = 0.5*(n_rel_samples*self.l2pie + np.log(dK[best_n[-1]]))
+                H_abs = 0.5*(self.l2pie + np.log(vhat[best_abs, best_abs]))
+                K_ratio = H_rel/(H_rel + H_abs)
+            p_select = beta.cdf(K_ratio, -p_rel, -p_rel)
+            if np.random.uniform() > p_select:
+                best_n = [best_abs]
         return x_test[best_n, :]
 
 class UCBLatent(ActiveLearner):
@@ -579,3 +590,101 @@ class SampledClassification(SampledThreshold):
             predicted_accuracy = P_below[predict_below].sum() + (1.0 - P_below[~predict_below]).sum()
             threshold_utility += predicted_accuracy/len(fhat)
         return threshold_utility/n_samples
+
+
+class OrdinalSampler(PeakComparitor):
+    def model_value(self, fhat, vhat):
+        # Probability of missclassification
+        p_y, mu = self.abs_likelihood.posterior_likelihood(fhat, vhat)
+
+        pass
+
+
+    def test_observation(self, x, y, uvi, x_test, n_samples, y_threshold, f = None):
+        self.add_observations(x, y, uvi, keep_f=True)
+        self.solve_laplace()
+        fhat, vhat = self.predict_latent(x_test)
+        util = self.model_value(fhat, vhat)
+        self.reset_observations()
+        return util
+
+    def select_observation(self, domain=None, x_test=None, n_test=50, n_samples=50, y_threshold=0.8, p_pref_tol=1e-3, n_mc_abs=5):
+        # n_test is the number of test point locations on the input function
+        # n_samples is the number of functions sampled from the posterior for estimating the utility
+        # n_mc_abs is the number of proposed observations sampled from the current posterior for absolute estimates
+        # Generate a set of test points in the domain (if not specified)
+        if x_test is None:
+            # x_test = self.linear_domain_sampler(n_test, domain)
+            x_test = self.uniform_domain_sampler(n_test, domain)
+            # x_test.sort(axis=0)
+        n_test = len(x_test)
+
+        # Sample a set of functions from the current posterior
+        # We save the f value because otherwise it gets out of whack when we add observations
+        flap = self.solve_laplace()
+        fhat, vhat = self.predict_latent(x_test)
+        # base_utility = self.calculate_threshold_utility(fhat, vhat, n_samples, y_threshold)
+
+        # Check a random set of pairwise relatives and all absolutes (massive sampling)
+
+        # Generate a set of random pairs (this randomly pairs all x_test points)
+        uvi = np.random.choice(n_test, (n_test/2, 2), replace=False)
+        p_pref = self.rel_likelihood.posterior_likelihood(fhat, vhat, uvi, y=-1)
+        V_max_rel = 0.0
+
+        self.store_observations()
+
+        # Relative observations
+        t_rel = time.time()
+        # Now calculate the expected value for each observation pair
+        for i, uv in enumerate(uvi):
+            x = x_test[uv]
+            V_rel = 0.0
+            try:
+                if p_pref[i] < p_pref_tol:
+                    V_rel += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+                elif p_pref[i] > 1.0-p_pref_tol:
+                    V_rel += p_pref[i]*self.test_observation(x, self._minus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+                else:
+                    V_rel += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+                    V_rel += p_pref[i] * self.test_observation(x, self._minus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
+                if V_rel >= V_max_rel:
+                    V_max_rel = V_rel
+                    x_best_rel = x
+            except GPpref.LaplaceException as exc:
+                print "Failed in relative test observation, x = [{0}, {1}]".format(x[0], x[1])
+                raise exc
+
+        # best_n = np.argpartition(V, -n_comparators)[-n_comparators:]
+        # best = np.argmax(V)
+        if self.verbose:
+            print 'V_max_rel = {0}, x = {2}, t = {1}s'.format(V_max_rel[0], time.time()-t_rel, x_best_rel[:,0])
+
+        # Absolute queries
+        V_max = 0.0
+        t_rel = time.time()
+        for i, x in enumerate(x_test):
+            F = fhat[i] + np.random.randn(n_mc_abs)*np.sqrt(vhat[i,i])
+            Y, mu = self.abs_likelihood.generate_samples(F)
+            V_abs = 0.0
+            Y = np.clip(Y, 1e-2, 1-1e-2) # I had stability problems in Laplace with values approaching 0 or 1
+            for y in Y:
+                try:
+                    V_abs += self.test_observation(x, y, None, x_test, n_samples, y_threshold, f=flap)
+                except ValueError:
+                    print "NaN Issue"
+                except GPpref.LaplaceException as exc:
+                    print "Failed in absolute test observation, x = {0}, y = {1}".format(x, y)
+                    raise exc
+            V_abs /= n_mc_abs
+            if V_abs > V_max:
+                V_max = V_abs
+                x_best = x
+        if self.verbose:
+            print 'V_max_abs = {0}, x = {2}, t = {1}s'.format(V_max, time.time() - t_rel, x_best)
+
+        if V_max_rel > V_max:
+            x_best = x_best_rel
+
+        return x_best
+
