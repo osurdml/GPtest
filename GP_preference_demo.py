@@ -14,7 +14,7 @@ train_hyper = False
 use_test_data = False # test_data.data3 #
 verbose = 2
 
-with open('./data/ordinal_test.yaml', 'rt') as fh:
+with open('./data/statruns_dec2017.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
 
 try:

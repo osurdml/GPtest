@@ -409,7 +409,7 @@ class AbsBoundProbit(object):
 class PreferenceGaussianProcess(object):
 
     def __init__(self, x_rel, uvi_rel, x_abs, y_rel, y_abs, rel_likelihood='PrefProbit', delta_f=1.0e-5,
-                 abs_likelihood='AbsBoundProbit', verbose=False, hyper_counts=[2, 1, 2]):
+                 abs_likelihood='AbsBoundProbit', verbose=False, hyper_counts=[2, 1, 2], rel_kwargs={}, abs_kwargs={}):
         # hyperparameters are split by hyper_counts, where hyper_counts should contain three integers > 0, the first is
         # the number of hypers in the GP covariance, second is the number in the relative likelihood, last is the number
         # in the absolute likelihood. hyper_counts.sum() should be equal to len(log_hyp)
@@ -419,8 +419,8 @@ class PreferenceGaussianProcess(object):
         self.set_observations(x_rel, uvi_rel, x_abs, y_rel, y_abs)
 
         self.delta_f = delta_f
-        self.rel_likelihood = getattr(sys.modules[__name__], rel_likelihood)() # This calls the constructor from string
-        self.abs_likelihood = getattr(sys.modules[__name__], abs_likelihood)()
+        self.rel_likelihood = getattr(sys.modules[__name__], rel_likelihood)(**rel_kwargs) # This calls the constructor from string
+        self.abs_likelihood = getattr(sys.modules[__name__], abs_likelihood)(**abs_kwargs)
 
         self.verbose = verbose
 
@@ -687,8 +687,10 @@ class ObservationSampler(object):
         return y, uvi, fx
 
 class AbsObservationSampler(ObservationSampler):
-    def observation_likelihood_array(self, x, y):
+    def observation_likelihood_array(self, x, y=None):
         fx = self.f(x)
+        if y is None:
+            y = self.l.y_list
         p_y = np.zeros((y.shape[0], fx.shape[0]), dtype='float')
         for i, fxi in enumerate(fx):
             p_y[:, i:i + 1] = self.l.likelihood(y, fxi[0])
@@ -703,8 +705,6 @@ class AbsObservationSampler(ObservationSampler):
         y, mu = self.generate_observations(x)
         return x, y, mu
 
-    def get_y_samples(self):
-        return self.l.get_y_samples()
 
 class RelObservationSampler(ObservationSampler):
     def observation_likelihood_array(self, x, y=-1):

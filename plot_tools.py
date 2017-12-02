@@ -139,8 +139,8 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
 
     # Posterior samples
     if n_posterior_samples > 0:
-        y_post = np.random.multivariate_normal(fhat.flatten(), vhat, n_posterior_samples)
-        h_pp = ax_l.plot(xt, y_post.T, lw=0.8)
+        f_post = np.random.multivariate_normal(fhat.flatten(), vhat, n_posterior_samples)
+        h_pp = ax_l.plot(xt, f_post.T, lw=0.8)
 
     # Latent function
     hf, hpf = plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])

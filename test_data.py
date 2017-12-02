@@ -11,12 +11,11 @@ def wrms(y_true, y_est, weight=True):
     return np.sqrt(np.mean(((y_true - y_est)*w)**2))
 
 
-def wrms_misclass(y_true, y_est):
+def wrms_misclass(y_true, y_est, w_power=2):
     # This is the misclassification error, where the weight is the max of the true or predicted value (penalise
     # predicting high values if the true value is low)
-    w = np.power(np.maximum(y_true, y_est), 2)
+    w = np.power(np.maximum(y_true, y_est), w_power)
     return np.sqrt(np.mean(((y_true - y_est)*w)**2))
-
 
 def rel_error(y_true, prel_true, y_est, prel_est, weight=False):
     if weight:
@@ -33,10 +32,17 @@ def rel_error(y_true, prel_true, y_est, prel_est, weight=False):
             mean_p_err += w*np.abs(prel_true[i,j] - prel_est[i,j])
     return mean_p_err/w_sum
 
+def ordinal_kld(p_y_true, p_y_est, w = np.array([1.0])):
+    kld = -(p_y_true * np.log(p_y_est/p_y_true)).sum(axis=0)
+    wkld = w*kld/w.mean()
+    return wkld.mean()
 
 class ObsObject(object):
     def __init__(self, x_rel, uvi_rel, x_abs, y_rel, y_abs):
         self.x_rel, self.uvi_rel, self.x_abs, self.y_rel, self.y_abs = x_rel, uvi_rel, x_abs, y_rel, y_abs
+
+    def get_obs(self):
+        return self.x_rel, self.uvi_rel, self.x_abs, self.y_rel, self.y_abs
 
 def obs_stats(obs_array, n_rel_samples):
     for method in obs_array:
@@ -143,6 +149,9 @@ class WaveSaver(object):
         with open(filename, 'wb') as fh:
             pickle.dump(self, fh)
 
+    def get_vals(self, n):
+        return self.amplitude[n], self.frequency[n], self.offset[n], self.damping[n]
+
 def damped_wave(x):
     y = np.cos(6 * np.pi * (x - 0.5)) * np.exp(-10 * (x - 0.5) ** 2)
     return y
@@ -154,7 +163,6 @@ def multi_peak(x):
 def basic_sine(x):
     y = (np.sin(x*2*np.pi + np.pi/4))/1.2
     return y
-
 
 def zero_fun(x):
     return 0*x

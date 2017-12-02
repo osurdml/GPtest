@@ -15,7 +15,7 @@ plt.rc('text', usetex=True)
 
 save_plots = False
 
-with open('./data/ordinal_test.yaml', 'rt') as fh:
+with open('./data/statruns_nov2017.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
 
 try:
@@ -30,6 +30,7 @@ except KeyError:
 
 n_xplot = 101
 keep_f = True
+learner_index = -1
 
 log_hyp = np.log(wave['hyperparameters'])
 
@@ -77,9 +78,10 @@ if save_plots:
 # Construct GP object
 prefGP = GPpref.PreferenceGaussianProcess(x_rel, uvi_rel, x_abs, y_rel, y_abs, **wave['GP_params'])
 
-model_kwargs = {'x_rel':x_rel, 'uvi_rel':uvi_rel, 'x_abs':x_abs, 'y_rel':y_rel, 'y_abs':y_abs}
+model_kwargs = {'x_rel':x_rel, 'uvi_rel':uvi_rel, 'x_abs':x_abs, 'y_rel':y_rel, 'y_abs':y_abs,
+                'rel_kwargs': wave['rel_obs_params'], 'abs_kwargs': wave['abs_obs_params']}
 model_kwargs.update(wave['GP_params'])
-learner_kwargs = wave['learners'][-1]
+learner_kwargs = wave['learners'][learner_index]
 learner = active_learners.Learner(**learner_kwargs)
 learner.build_model(model_kwargs)
 

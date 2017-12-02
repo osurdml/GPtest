@@ -593,98 +593,105 @@ class SampledClassification(SampledThreshold):
 
 
 class OrdinalSampler(PeakComparitor):
-    def model_value(self, fhat, vhat):
-        # Probability of missclassification
+
+    def model_value(self, fhat, vhat, y_threshold):
+        # Probability of correct classification
         p_y, mu = self.abs_likelihood.posterior_likelihood(fhat, vhat)
+        selection = np.argmax(p_y, axis=0)+1
+        value = 0.0
+        for i in range(len(fhat)):
+            if selection[i] >= y_threshold:
+                value += p_y[y_threshold-1:,i].sum()
+            else:
+                value += p_y[0:y_threshold-1,i].sum()
+        return value/len(fhat)
 
-        pass
-
-
-    def test_observation(self, x, y, uvi, x_test, n_samples, y_threshold, f = None):
+    def test_observation(self, x, y, uvi, x_test, y_threshold):
         self.add_observations(x, y, uvi, keep_f=True)
         self.solve_laplace()
         fhat, vhat = self.predict_latent(x_test)
-        util = self.model_value(fhat, vhat)
+        util = self.model_value(fhat, vhat, y_threshold)
         self.reset_observations()
         return util
 
-    def select_observation(self, domain=None, x_test=None, n_test=50, n_samples=50, y_threshold=0.8, p_pref_tol=1e-3, n_mc_abs=5):
-        # n_test is the number of test point locations on the input function
-        # n_samples is the number of functions sampled from the posterior for estimating the utility
-        # n_mc_abs is the number of proposed observations sampled from the current posterior for absolute estimates
+    def get_rating_set_uv(self, n_ratings):
+        y = np.ones((n_ratings - 1, 1), dtype='int')
+        uv = []
+        for i in range(n_ratings):
+            other_i = np.delete(np.arange(n_ratings), i)
+            uv.append(np.hstack((np.atleast_2d(other_i).T, y*i)))
+        return y, uv
+
+
+    def select_observation(self, domain=None, x_test=None, n_test=50, y_threshold=5, p_pref_tol=1e-3, n_rel_samples=2, n_mc_samples=100):
         # Generate a set of test points in the domain (if not specified)
         if x_test is None:
             # x_test = self.linear_domain_sampler(n_test, domain)
             x_test = self.uniform_domain_sampler(n_test, domain)
-            # x_test.sort(axis=0)
         n_test = len(x_test)
 
-        # Sample a set of functions from the current posterior
         # We save the f value because otherwise it gets out of whack when we add observations
         flap = self.solve_laplace()
         fhat, vhat = self.predict_latent(x_test)
-        # base_utility = self.calculate_threshold_utility(fhat, vhat, n_samples, y_threshold)
 
-        # Check a random set of pairwise relatives and all absolutes (massive sampling)
+        # Sample a set of functions from the current posterior
+        f_post = np.random.multivariate_normal(fhat.flatten(), vhat, n_mc_samples)
 
-        # Generate a set of random pairs (this randomly pairs all x_test points)
-        uvi = np.random.choice(n_test, (n_test/2, 2), replace=False)
-        p_pref = self.rel_likelihood.posterior_likelihood(fhat, vhat, uvi, y=-1)
+        # Generate a set of random groups of n_rel_samples from the input space
+        uvi = np.array([np.random.choice(n_test, n_rel_samples, replace=False) for i in range(n_test)])
         V_max_rel = 0.0
 
         self.store_observations()
 
         # Relative observations
         t_rel = time.time()
-        # Now calculate the expected value for each observation pair
+        y_uv, full_uv = self.get_rating_set_uv(n_rel_samples)
+
+        # Calculate the expected value for each observation set
         for i, uv in enumerate(uvi):
             x = x_test[uv]
+            p_pref = np.zeros(n_rel_samples)
+            for fp in f_post:
+                p_pref[np.argmax(fp[uv])] += 1
+            p_pref /= n_mc_samples
             V_rel = 0.0
-            try:
-                if p_pref[i] < p_pref_tol:
-                    V_rel += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
-                elif p_pref[i] > 1.0-p_pref_tol:
-                    V_rel += p_pref[i]*self.test_observation(x, self._minus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
-                else:
-                    V_rel += (1-p_pref[i])*self.test_observation(x, self._plus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
-                    V_rel += p_pref[i] * self.test_observation(x, self._minus_y_obs, self._default_uvi, x_test, n_samples, y_threshold, f=flap)
-                if V_rel >= V_max_rel:
-                    V_max_rel = V_rel
-                    x_best_rel = x
-            except GPpref.LaplaceException as exc:
-                print "Failed in relative test observation, x = [{0}, {1}]".format(x[0], x[1])
-                raise exc
+
+            for i, p_x in enumerate(p_pref):
+                if p_x > p_pref_tol:
+                    V_rel += p_x*self.test_observation(x, y_uv, full_uv[i], x_test, y_threshold)
+            if V_rel >= V_max_rel:
+                V_max_rel = V_rel
+                x_best_rel = x
 
         # best_n = np.argpartition(V, -n_comparators)[-n_comparators:]
         # best = np.argmax(V)
-        if self.verbose:
-            print 'V_max_rel = {0}, x = {2}, t = {1}s'.format(V_max_rel[0], time.time()-t_rel, x_best_rel[:,0])
+        if self.verbose >= 1:
+            print 'V_max_rel = {0}, x = {2}, t = {1}s'.format(V_max_rel, time.time()-t_rel, x_best_rel[:,0])
 
         # Absolute queries
         V_max = 0.0
         t_rel = time.time()
-        for i, x in enumerate(x_test):
-            F = fhat[i] + np.random.randn(n_mc_abs)*np.sqrt(vhat[i,i])
-            Y, mu = self.abs_likelihood.generate_samples(F)
+        p_y, mu = self.abs_likelihood.posterior_likelihood(fhat, vhat)
+        for x, ppy in zip(x_test, p_y.T):
             V_abs = 0.0
-            Y = np.clip(Y, 1e-2, 1-1e-2) # I had stability problems in Laplace with values approaching 0 or 1
-            for y in Y:
-                try:
-                    V_abs += self.test_observation(x, y, None, x_test, n_samples, y_threshold, f=flap)
-                except ValueError:
-                    print "NaN Issue"
-                except GPpref.LaplaceException as exc:
-                    print "Failed in absolute test observation, x = {0}, y = {1}".format(x, y)
-                    raise exc
-            V_abs /= n_mc_abs
+            for y_obs, p_obs in enumerate(ppy):
+                if p_obs > p_pref_tol:
+                    V_abs += p_obs*self.test_observation(x, y_obs+1, None, x_test, y_threshold)
             if V_abs > V_max:
                 V_max = V_abs
                 x_best = x
-        if self.verbose:
-            print 'V_max_abs = {0}, x = {2}, t = {1}s'.format(V_max, time.time() - t_rel, x_best)
+        if self.verbose >= 1:
+            print 'V_max_abs = {0}, t = {1}s'.format(V_max, time.time() - t_rel)
 
         if V_max_rel > V_max:
             x_best = x_best_rel
 
         return x_best
 
+
+class OrdinalOptimist(OrdinalSampler):
+    def model_value(self, fhat, vhat, y_threshold):
+        # Probability of values above threshold
+        p_y, mu = self.abs_likelihood.posterior_likelihood(fhat, vhat)
+        value = p_y[y_threshold-1:,:].sum()/len(fhat)
+        return value/len(fhat)

@@ -9,6 +9,8 @@ import plot_statruns
 import yaml
 
 np.set_printoptions(precision=3)
+wrms_fun = test_data.wrms_misclass
+wrms_args = {'w_power': 1}
 
 now_time = time.strftime("%Y_%m_%d-%H_%M")
 
@@ -43,18 +45,21 @@ waver = test_data.WaveSaver(n_trials, random_wave.n_components)
 # True function
 x_plot = np.linspace(0.0, 1.0, statrun_params['n_xtest'], dtype='float')
 x_test = np.atleast_2d(x_plot).T
+far_domain = np.array([[-3.0], [-2.0]])
 
 # Construct active learner objects
 n_learners = len(run_parameters['learners'])
 learners = []
 names = []
 obs_array = []
+full_obs = {}
 for l in run_parameters['learners']:
     if 'n_rel_samples' in l['obs_args']:
         l['obs_args']['n_rel_samples'] = n_rel_samples
     learners.append(active_learners.Learner(**l))
     names.append(l['name'])
     obs_array.append({'name': l['name'], 'obs': []})
+    full_obs[l['name']] = [None] * n_trials
 
 wrms_results = np.zeros((n_learners, n_queries+1, n_trials))
 true_pos_results = np.zeros((n_learners, n_queries+1, n_trials), dtype='int')
@@ -86,9 +91,12 @@ while trial_number < n_trials:
             p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
 
         # Initial data
-        x_rel, uvi_rel, uv_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(statrun_params['n_rel_train'], n_xdim=1)
-        x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(statrun_params['n_abs_train'], n_xdim=1)
-        model_kwargs = {'x_rel': x_rel, 'uvi_rel': uvi_rel, 'x_abs': x_abs, 'y_rel': y_rel, 'y_abs': y_abs}
+        x_rel, uvi_rel, uv_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(statrun_params['n_rel_train'],
+                                                                                     n_xdim=1, domain=far_domain)
+        x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(statrun_params['n_abs_train'], n_xdim=1,
+                                                                                     domain=far_domain)
+        model_kwargs = {'x_rel': x_rel, 'uvi_rel': uvi_rel, 'x_abs': x_abs, 'y_rel': y_rel, 'y_abs': y_abs,
+                        'rel_kwargs': run_parameters['rel_obs_params'], 'abs_kwargs': run_parameters['abs_obs_params']}
         model_kwargs.update(run_parameters['GP_params'])
 
         # Get initial solution
@@ -100,12 +108,15 @@ while trial_number < n_trials:
             y_abs_est = learner.model.abs_posterior_mean(x_test, fhat, vhat)
 
             best_points_est = set(np.argpartition(y_abs_est.flatten(), -n_best_points)[-n_best_points:])
-            wrms_results[nl, 0, trial_number] = test_data.wrms(y_abs_true, y_abs_est)
+            wrms_results[nl, 0, trial_number] = wrms_fun(y_abs_true, y_abs_est, **wrms_args)
             true_pos_results[nl, 0, trial_number] = len(best_points_set.intersection(best_points_est))
             selected_error[nl, 0, trial_number] = test_data.wrms(y_abs_true[best_points], y_abs_est[best_points], weight=False)
             if calc_relative_error:
                 p_rel_y_post = learner.model.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
                 relative_error[nl, 0, trial_number] = test_data.rel_error(y_abs_true, p_rel_y_true, y_abs_est, p_rel_y_post, weight=True)
+
+            obs_tuple = learner.model.get_observations()
+            full_obs[learner.name][trial_number] = [test_data.ObsObject(*obs_tuple)]
 
         for obs_num in range(n_queries):
             t0 = time.time()
@@ -117,23 +128,24 @@ while trial_number < n_trials:
                     learner.obs_arguments['p_rel'] = linear_p_rel
 
                 next_x = learner.model.select_observation(**learner.obs_arguments)
+                next_uvi = None
                 if next_x.shape[0] == 1:
                     next_y, next_f = abs_obs_fun.generate_observations(next_x)
-                    learner.model.add_observations(next_x, next_y)
                     # print 'Abs: x:{0}, y:{1}'.format(next_x[0], next_y[0])
                 else:
                     next_y, next_uvi, next_fx = rel_obs_fun.gaussian_multi_pairwise_sampler(next_x)
                     next_fuv = next_fx[next_uvi][:,:,0]
                     fuv_rel = np.concatenate((fuv_rel, next_fuv), 0)
-                    learner.model.add_observations(next_x, next_y, next_uvi)
                     # print 'Rel: x:{0}, best_index:{1}'.format(next_x.flatten(), next_uvi[0, 1])
+                full_obs[learner.name][trial_number].append((next_x, next_y, next_uvi))
+                learner.model.add_observations(next_x, next_y, next_uvi)
                 f = learner.model.solve_laplace()
                 fhat, vhat = learner.model.predict_latent(x_test)
                 y_abs_est = learner.model.abs_posterior_mean(x_test, fhat, vhat)
 
                 # Get selected best point set and error results
                 best_points_est = set(np.argpartition(y_abs_est.flatten(), -n_best_points)[-n_best_points:])
-                wrms_results[nl, obs_num+1, trial_number] = test_data.wrms_misclass(y_abs_true, y_abs_est)
+                wrms_results[nl, obs_num+1, trial_number] = wrms_fun(y_abs_true, y_abs_est, **wrms_args)
                 true_pos_results[nl, obs_num+1, trial_number] = len(best_points_set.intersection(best_points_est))
                 selected_error[nl, obs_num+1, trial_number] = test_data.wrms(y_abs_true[best_points], y_abs_est[best_points], weight=False)
                 if calc_relative_error:
@@ -155,11 +167,11 @@ while trial_number < n_trials:
 
     trial_number += 1
     if relative_error is not None:
-        plot_statruns.save_data(data_dir, wrms_results[:,:,:trial_number], true_pos_results[:, :, :trial_number],
-                                selected_error[:, :, :trial_number], obs_array, relative_error[:, :, :trial_number])
+        plot_statruns.save_data(data_dir, wrms_results, true_pos_results, selected_error, obs_array, full_obs=full_obs,
+                                rel_err=relative_error, t=trial_number)
     else:
-        plot_statruns.save_data(data_dir, wrms_results[:,:,:trial_number], true_pos_results[:, :, :trial_number],
-                                selected_error[:, :, :trial_number], obs_array)
+        plot_statruns.save_data(data_dir, wrms_results, true_pos_results, selected_error, obs_array, full_obs=full_obs,
+                                t=trial_number)
 
     waver.save(data_dir+'wave_data.pkl')
 
