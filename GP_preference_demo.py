@@ -56,7 +56,10 @@ else:
 
 # Construct GP object
 wave['GP_params']['verbose'] = verbose
-prefGP = GPpref.PreferenceGaussianProcess(x_rel, uvi_rel, x_abs, y_rel, y_abs, **wave['GP_params'])
+model_kwargs = {'x_rel':x_rel, 'uvi_rel':uvi_rel, 'x_abs':x_abs, 'y_rel':y_rel, 'y_abs':y_abs,
+                'rel_kwargs': wave['rel_obs_params'], 'abs_kwargs': wave['abs_obs_params']}
+model_kwargs.update(wave['GP_params'])
+prefGP = GPpref.PreferenceGaussianProcess(**model_kwargs)
 
 prefGP.set_hyperparameters(log_hyp)
 # If training hyperparameters, use external optimiser
