@@ -7,6 +7,7 @@ import GPpref
 import active_learners
 from Tkinter import Tk
 from tkFileDialog import askdirectory
+import argparse
 # from test_data import ObsObject
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
@@ -149,9 +150,9 @@ def load_data(data_dir=None):
     return data_dir, wrms_results, true_pos_results, selected_error, obs_array, relative_error, full_obs
 
 
-def load_and_plot(save_plots=True, *args, **kwargs):
+def load_and_plot(save_plots=True, data_dir=None, *args, **kwargs):
     try:
-        data_dir, wrms_results, true_pos_results, selected_error, obs_array, relative_error, full_obs = load_data()
+        data_dir, wrms_results, true_pos_results, selected_error, obs_array, relative_error, full_obs = load_data(data_dir)
     except IOError:
         return None
 
@@ -194,8 +195,9 @@ def load_multiple(*args, **kwargs):
     return hf, wrms, true_pos, sel_err, obs, rel_err
 
 
-def build_ordinal_wrms(max_y = 0.8, *args, **kwargs):
-    data_dir = get_data_dir()
+def build_ordinal_wrms(max_y = 0.8, data_dir = None, make_plots = True, *args, **kwargs):
+    if data_dir is None:
+        data_dir = get_data_dir()
     run_parameters = _load_params(data_dir+'params.yaml')
     wave_data = _load_file(data_dir + 'wave_data.pkl')
     full_obs = _load_file(data_dir + 'full_obs.pkl')
@@ -264,7 +266,17 @@ def build_ordinal_wrms(max_y = 0.8, *args, **kwargs):
 
     _save_file(data_dir+'wkld.pkl', wkld)
     _save_file(data_dir+'max_count.pkl', max_count)
-    plot_ordinal_results(wkld, max_count, run_parameters=run_parameters, data_dir=data_dir)
+    if make_plots:
+        plot_ordinal_results(wkld, max_count, run_parameters=run_parameters, data_dir=data_dir)
+
+def load_ordinal_results(data_dir = None):
+    if data_dir is None:
+        data_dir = get_data_dir()
+
+    wkld = _load_file(data_dir+'wkld.pkl')
+    max_count = _load_file(data_dir+'max_count.pkl')
+
+    plot_ordinal_results(wkld, max_count, data_dir=data_dir)
 
 def plot_ordinal_results(wkld, max_count, run_parameters = None, data_dir=None, bars=True, exclusions=[]):
     if run_parameters is None:
@@ -296,5 +308,19 @@ def plot_ordinal_results(wkld, max_count, run_parameters = None, data_dir=None, 
     return f
 
 if __name__ == "__main__":
-    # build_ordinal_wrms()
-    hf = load_and_plot(save_plots=False, bars=True)
+    parser = argparse.ArgumentParser(description='Statrun plots for active learning preference GP')
+    parser.add_argument('-np', '--no-plots', dest='make_plots', action='store_false',
+                        help='Turn off plots (default False)')
+    parser.add_argument('-ow', '--ordinal-wrms', dest='owrms', action='store_true',
+                        help='Build ordinal wrms results (default False)')
+    parser.add_argument('-lm', '--load-multiple', dest='load_multiple', action='store_true',
+                        help='Load from multiple directories (default False)')
+    parser.add_argument('-d', '--data-dir', default=None, help='Data directory')
+    args = parser.parse_args()
+
+    if args.owrms:
+        build_ordinal_wrms(data_dir=args.data_dir, make_plots=args.make_plots)
+    if args.load_multiple:
+        load_multiple(save_plots=args.make_plots)
+    else:
+        load_and_plot(save_plots=args.make_plots, bars=True)

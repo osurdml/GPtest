@@ -719,7 +719,7 @@ class RelObservationSampler(ObservationSampler):
     def generate_n_observations(self, n, n_xdim=1, domain=None):
         x = self._gen_x_obs(2*n, n_xdim, domain)
         uvi = np.arange(2*n).reshape((n, 2))
-        uv = x[uvi][:, :, 0]
+        uv = x[uvi] # [:, :, 0]
         y, fuv = self.generate_observations(uv)
         return x, uvi, uv, y, fuv
 

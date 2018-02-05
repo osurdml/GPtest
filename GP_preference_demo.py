@@ -14,14 +14,14 @@ train_hyper = False
 use_test_data = False # test_data.data3 #
 verbose = 2
 
-with open('./data/statruns_dec2017.yaml', 'rt') as fh:
+with open('./data/statruns_jan2018.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
-
 try:
     np.random.seed(wave['statrun_params']['randseed'])
 except KeyError:
     np.random.seed(0)
-random_wave = test_data.MultiWave(**wave['wave_params'])
+d_x = wave['GP_params']['hyper_counts'][0]-1
+random_wave = test_data.MultiWave(n_dimensions=d_x, **wave['wave_params'])
 log_hyp = np.log(wave['hyperparameters'])
 
 n_rel_train = 10

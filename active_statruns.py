@@ -7,14 +7,25 @@ import active_learners
 import test_data
 import plot_statruns
 import yaml
+import argparse
 
 np.set_printoptions(precision=3)
 wrms_fun = test_data.wrms_misclass
 wrms_args = {'w_power': 1}
 
 now_time = time.strftime("%Y_%m_%d-%H_%M")
+yaml_config ='./data/statruns_dec2017.yaml'
 
-with open('./data/statruns_nov2017.yaml', 'rt') as fh:
+parser = argparse.ArgumentParser(description='Statruns for active learning with preference GP')
+parser.add_argument('-np', '--no-plots', dest='make_plots', action='store_false', help='Turn off plots (default False)')
+parser.add_argument('yaml_config', default=yaml_config, help='YAML config file')
+
+args = parser.parse_args()
+
+print "Using YAML config: {0}".format(args.yaml_config)
+if not args.make_plots:
+    print "No plot output."
+with open(args.yaml_config, 'rt') as fh:
     run_parameters = yaml.safe_load(fh)
 
 log_hyp = np.log(run_parameters['hyperparameters'])
@@ -175,4 +186,5 @@ while trial_number < n_trials:
 
     waver.save(data_dir+'wave_data.pkl')
 
-hfig = plot_statruns.plot_results(wrms_results, true_pos_results, selected_error, obs_array, relative_error=relative_error, data_dir=data_dir, bars=True, norm_comparator=0)
+if args.make_plots:
+    hfig = plot_statruns.plot_results(wrms_results, true_pos_results, selected_error, obs_array, relative_error=relative_error, data_dir=data_dir, bars=True, norm_comparator=0)

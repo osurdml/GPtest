@@ -55,12 +55,13 @@ def obs_stats(obs_array, n_rel_samples):
 
 
 class VariableWave(object):
-    def __init__(self, amp_range, f_range, off_range, damp_range, n_components=1):
+    def __init__(self, amp_range, f_range, off_range, damp_range, n_components=1, n_dimensions=1):
         self.amp_range = amp_range
         self.f_range = f_range
         self.off_range = off_range
         self.damp_range = damp_range
         self.n_components = n_components
+        self.n_dimensions = n_dimensions
         self.randomize()
 
     def out(self, x):
@@ -93,13 +94,13 @@ class MultiWave(VariableWave):
         y = np.zeros(np.array(x).shape)
         for a, f, o, d in zip(self.amplitude, self.frequency, self.offset, self.damping):
             y += a*np.cos(f*np.pi*(x-o)) * np.exp(-d*(x-o)**2)
-        return y
+        return y.sum(axis=1, keepdims=True)
 
     def randomize(self, print_vals=False):
-        self.amplitude = np.random.uniform(low=self.amp_range[0], high=self.amp_range[1], size=self.n_components)
-        self.frequency = np.random.uniform(low=self.f_range[0], high=self.f_range[1], size=self.n_components)
-        self.offset = np.random.uniform(low=self.off_range[0], high=self.off_range[1], size=self.n_components)
-        self.damping = np.random.uniform(low=self.damp_range[0], high=self.damp_range[1], size=self.n_components)
+        self.amplitude = np.random.uniform(low=self.amp_range[0], high=self.amp_range[1], size=(self.n_components, self.n_dimensions))
+        self.frequency = np.random.uniform(low=self.f_range[0], high=self.f_range[1], size=(self.n_components, self.n_dimensions))
+        self.offset = np.random.uniform(low=self.off_range[0], high=self.off_range[1], size=(self.n_components, self.n_dimensions))
+        self.damping = np.random.uniform(low=self.damp_range[0], high=self.damp_range[1], size=(self.n_components, self.n_dimensions))
         if print_vals:
             self.print_values()
 
@@ -203,7 +204,7 @@ def data3():
                       [0.06054717], [0.45331369],
                       [0.8461625 ], [0.58854979]])
     uvi_rel = np.array([[0, 1], [2, 3], [4, 5]], dtype='int')
-    uv_rel = x_rel[uvi_rel][:,:,0]
+    uv_rel = x_rel[uvi_rel] # [:,:,0]
     y_rel = np.array([[-1], [1], [1]], dtype='int')
     fuv_rel = np.array([[0.0043639, -0.10653237], [0.01463141, 0.05046293],
                         [0.01773679, 0.45730181]])
