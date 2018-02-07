@@ -716,12 +716,17 @@ class RelObservationSampler(ObservationSampler):
             p_y[:, i:i + 1] = self.l.likelihood(y, cross_fx)
         return p_y
 
+    def generate_observations(self, x, uvi):
+        fx = self.f(x)
+        y, ff = self.l.generate_samples(fx[uvi][:, :, 0])
+        return y, ff
+
     def generate_n_observations(self, n, n_xdim=1, domain=None):
         x = self._gen_x_obs(2*n, n_xdim, domain)
         uvi = np.arange(2*n).reshape((n, 2))
-        uv = x[uvi] # [:, :, 0]
-        y, fuv = self.generate_observations(uv)
-        return x, uvi, uv, y, fuv
+        # uv = x[uvi] # [:, :, 0]
+        y, fuv = self.generate_observations(x, uvi)
+        return x, uvi, y, fuv
 
 
 

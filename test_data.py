@@ -171,7 +171,7 @@ def zero_fun(x):
 def data1():
     x_rel = np.array([[0.6], [0.7]])
     uvi_rel = np.array([[0, 1], [1, 0]], dtype='int')
-    uv_rel = x_rel[uvi_rel][:,:,0]
+    # uv_rel = x_rel[uvi_rel][:,:,0]
     y_rel = np.array([[1], [1]], dtype='int')
     fuv_rel = np.array([[-0.1, 0.1], [-0.1, 0.1]])
 
@@ -179,7 +179,7 @@ def data1():
     y_abs = np.array([[0.5]])
     mu_abs = np.array([[0.0]])
 
-    return x_rel, uvi_rel, uv_rel, y_rel, fuv_rel, x_abs, y_abs, mu_abs
+    return x_rel, uvi_rel, y_rel, fuv_rel, x_abs, y_abs, mu_abs
 
 
 def data2():
@@ -187,7 +187,7 @@ def data2():
                       [ 0.06054717], [ 0.45331369],
                       [ 0.8461625 ], [ 0.58854979]])
     uvi_rel = np.array([[0, 1], [2, 3], [4, 5]], dtype='int')
-    uv_rel = x_rel[uvi_rel][:,:,0]
+    # uv_rel = x_rel[uvi_rel][:,:,0]
     y_rel = np.array([[-1], [1], [1]], dtype='int')
     fuv_rel = np.array([[0.0043639, -0.10653237], [0.01463141, 0.05046293],
                         [0.01773679, 0.45730181]])
@@ -196,7 +196,7 @@ def data2():
     y_abs = np.array([[0.38966307]])
     mu_abs = np.array([[0.0]])
 
-    return x_rel, uvi_rel, uv_rel, y_rel, fuv_rel, x_abs, y_abs, mu_abs
+    return x_rel, uvi_rel, y_rel, fuv_rel, x_abs, y_abs, mu_abs
 
 
 def data3():
@@ -204,7 +204,7 @@ def data3():
                       [0.06054717], [0.45331369],
                       [0.8461625 ], [0.58854979]])
     uvi_rel = np.array([[0, 1], [2, 3], [4, 5]], dtype='int')
-    uv_rel = x_rel[uvi_rel] # [:,:,0]
+    # uv_rel = x_rel[uvi_rel][:,:,0]
     y_rel = np.array([[-1], [1], [1]], dtype='int')
     fuv_rel = np.array([[0.0043639, -0.10653237], [0.01463141, 0.05046293],
                         [0.01773679, 0.45730181]])
@@ -213,4 +213,4 @@ def data3():
     y_abs = np.array([[0.38966307], [0.999]])
     mu_abs = np.array([[0.0], [0.0]])
 
-    return x_rel, uvi_rel, uv_rel, y_rel, fuv_rel, x_abs, y_abs, mu_abs
+    return x_rel, uvi_rel, y_rel, fuv_rel, x_abs, y_abs, mu_abs
