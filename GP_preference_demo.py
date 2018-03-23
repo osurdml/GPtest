@@ -24,8 +24,8 @@ d_x = wave['GP_params']['hyper_counts'][0]-1
 random_wave = test_data.MultiWave(n_dimensions=d_x, **wave['wave_params'])
 log_hyp = np.log(wave['hyperparameters'])
 
-n_rel_train = 50
-n_abs_train = 5
+n_rel_train = 15
+n_abs_train = 2
 
 n_xplot = 21
 n_posterior_samples = 3

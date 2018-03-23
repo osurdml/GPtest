@@ -187,9 +187,10 @@ def true_plots2D(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, xa_train=None, ya_tr
     h_yt = ax_a.plot_wireframe(xx, yy, np.reshape(mu_t, (nx, nx)), color=lines[1])
 
     norm_py = p_a_y/p_a_y.max()
-    cc = cm.get_cmap()
+    cc = cm.get_cmap('Blues')
+    h_py = []
     for y, py in zip(y_samples, norm_py):
-        ax_a.scatter(xt[:, 0], xt[:, 1], y, s=py*15.0, marker='o', c=cc(py))
+        h_py.append(ax_a.scatter(xt[:, 0], xt[:, 1], y, s=py*15.0, marker='o', c=cc(py)))
 
     if xa_train is not None and xa_train.shape[0] > 0:
         ax_a.scatter(xa_train[:, 0], xa_train[:, 1], ya_train, c='w', marker='+')
@@ -210,7 +211,7 @@ def estimate_plots2D(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     xx, yy = np.meshgrid(x0, x1)
 
     fig, (ax_l, ax_a) = plot_setup_2d(**kwargs)
-    cc = cm.get_cmap()
+    cc = cm.get_cmap('inferno')
 
     # Latent function estimate
     # hf =ax_l.plot_wireframe(xx, yy, np.reshape(ft, (nx, nx)), color=lines[0])
@@ -233,6 +234,7 @@ def estimate_plots2D(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     # h_yt = ax_a.plot_wireframe(xx, yy, np.reshape(mu_t, (nx, nx)), color=lines[1])
     hEy = ax_a.plot_wireframe(xx, yy, np.reshape(E_y, (nx, nx)), color=lines[3])
 
+    cc = cm.get_cmap('Blues')
     norm_py = p_a_y/p_a_y.max()
     for y, py in zip(y_samples, norm_py):
         ax_a.scatter(xt[:, 0], xt[:, 1], y, s=py*15.0, marker='o', c=cc(py))
