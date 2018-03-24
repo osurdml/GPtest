@@ -76,7 +76,7 @@ class SquaredExponential(object):
 class PrefProbit(object):
     type = 'preference'
     y_type = 'discrete'
-    y_list = np.array([-1, 1], dtype='int')
+    y_list = np.array([[-1], [1]], dtype='int')
 
     def __init__(self, sigma=1.0):
         self.set_hyper([sigma])
@@ -306,7 +306,7 @@ class OrdinalProbit(object):
 class AbsBoundProbit(object):
     type = 'bounded continuous'
     y_type = 'bounded'
-    y_list = np.linspace(0.01, 0.99, 101)
+    y_list = np.atleast_2d(np.linspace(0.01, 0.99, 101)).T
 
     def __init__(self, sigma=1.0, v=10.0):
         # v is the precision, kind of related to inverse of noise, high v is sharp distributions

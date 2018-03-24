@@ -28,7 +28,7 @@ def make_poly_array(x,y,sigma):
     return xy
 
 
-def plot_with_bounds(ax, x, y, s, c=lines[0]):
+def plot_with_bounds(ax, x, y, s, c=lines[0], lw=1.5, *args, **kwargs):
     isort = np.argsort(x.flat)
     xx, yy = x[isort], y[isort]
     try:
@@ -37,7 +37,7 @@ def plot_with_bounds(ax, x, y, s, c=lines[0]):
         ss = s
     xy = make_poly_array(xx, yy, ss)
     h_patch = Polygon(xy, ec=c, fc=lighten(c, 3), alpha=0.5)
-    h_fx, = ax.plot(xx, yy, lw=1.5, c=c)
+    h_fx, = ax.plot(xx, yy, lw=lw, c=c, *args, **kwargs)
     ax.add_patch(h_patch)
     clim = ax.get_ylim()
     ax.set_ylim(bottom = min(clim[0],xy[:,1].min()), top = max(clim[1], xy[:,1].max()))

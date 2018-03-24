@@ -47,10 +47,10 @@ class GaussianProcess(object):
         Kxx = self.covFun.compute_Kxx_matrix()
         iKxx = np.linalg.inv(Kxx)
         Kzx = Kxz.T
-        K_diag = np.diagonal(np.dot(np.dot(Kzx,iKxx),Kxz))
-        K_noise = self.covFun.sf2*np.ones(np.size(testInput,axis=0))
+        K_diag = np.dot(np.dot(Kzx,iKxx),Kxz)
+        K_noise = self.covFun.sn2*np.eye(np.size(testInput,axis=0))
         fz = np.dot(np.dot(Kzx,iKxx),self.trainTarget.T)
-        cov_fz = K_noise - K_diag
+        cov_fz = K_noise + K_diag
         return fz, cov_fz
 	
     # Define GP negative log marginal likelihood function
@@ -93,7 +93,7 @@ class SquaredExponential(CovarianceFunction):
         self.hyp = np.exp(self.logHyp)	# hyperparameters
         n = len(self.hyp)
         self.M = self.hyp[:n-2]        	# length scales
-        self.sf2 = self.hyp[n-2]**2        # squared exponential variance
+        self.sf2 = self.hyp[n-2]**2        # sigma_f variance
         self.sn2 = self.hyp[n-1]**2        # noise variance
 	
     def compute_Kxx_matrix(self):
