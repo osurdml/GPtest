@@ -24,8 +24,8 @@ d_x = wave['GP_params']['hyper_counts'][0]-1
 random_wave = test_data.MultiWave(n_dimensions=d_x, **wave['wave_params'])
 log_hyp = np.log(wave['hyperparameters'])
 
-n_rel_train = 0
-n_abs_train = 2
+n_rel_train = 5
+n_abs_train = 0
 
 n_xplot = 101
 n_posterior_samples = 3
@@ -98,7 +98,7 @@ if d_x is 1:
                            t_r=r'Posterior relative likelihood $P(x_0 \succ x_1 | \mathcal{Y}, \theta)$')
     p_err = test_data.rel_error(mu_true, p_rel_y_true, E_y, p_rel_y_post, weight=False)
     print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}, p_err: {2:0.3f}".format(wrms, wrms2, p_err)
-    plt.show()
+    plt.show(block=False)
 
 
 elif d_x is 2:
@@ -113,7 +113,7 @@ elif d_x is 2:
                              t_l=r'$\mathcal{GP}$ latent function estimate $\hat{f}(x)$',
                              t_a=r'Posterior absolute likelihood, $p(u | \mathcal{Y}, \theta)$')
     print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}".format(wrms, wrms2)
-    plt.show()
+    plt.show(block=False)
 
 
 else:

@@ -6,18 +6,20 @@ import matplotlib.cm as cm
 from nice_plot_colors import *
 from cycler import cycler
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
-
 # plt.rc('axes', prop_cycle=(cycler('color', [greyify(c, .5, .8) for c in reversed(lines)])))
 plt.rc('axes', prop_cycle=(cycler('color', lines)))
+
 
 def xgen(xp, n_dim):
     for i in range(n_dim):
         yield xp
 
+
 def make_meshlist(x_plot, d_x):
     xx = xgen(x_plot, d_x)
     x_mesh = np.vstack(np.meshgrid(*xx, copy=False)).reshape(d_x, -1).T
     return x_mesh
+
 
 def make_poly_array(x,y,sigma):
     nx = len(x)
@@ -65,11 +67,39 @@ def plot_setup_1d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood,
     ax_r.set_ylabel('$x_1$')
     return fig, (ax_l, ax_a, ax_r)
 
-def plot_relative_likelihood(ax, p_y, extent):
+
+def plot_relative_queries(ax, uvr_train, fuvr_train, yr_train, class_icons, marker_options=None):
+    for uv, fuv, y in zip(uvr_train, fuvr_train, yr_train):
+        ax.plot(uv, fuv, 'b-', color=lighten(lines[0]))
+        ax.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], class_icons[(y[0] + 1) / 2], **marker_options)
+
+
+def plot_absolute_likelihood(ax, p_a_y, xt, mu_t, y_samples, E_y=None, xa_train=None, ya_train=None):
+    dely = y_samples[1, 0] - y_samples[0, 0]
+    abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0] - 0.5*dely, y_samples[-1, 0] + 0.5*dely]
+    vmax = max(1.0, p_a_y.max())
+    h_pat = ax.imshow(p_a_y, origin='lower', extent=abs_extent, aspect='auto', vmin=0.0, vmax=vmax)
+    if xa_train is not None and xa_train.shape[0] > 0:
+        ax.plot(xa_train, ya_train, 'w+')
+    h_lines = ax.plot(xt, mu_t, c=lines[0])
+    legend_entries = [r'True mean, $E[y]$']
+    if E_y is not None:
+        h_lines.extend(ax.plot(xt, E_y, color=lines[3]))
+        legend_entries.append(r'Posterior mean, $E_{p(y|\mathcal{Y})}\left[y\right]$')
+    ax.legend(h_lines, legend_entries)
+    ax.set_xlim(xt[0], xt[-1])
+    ax.get_figure().colorbar(h_pat, ax=ax)
+    return h_pat
+
+def plot_relative_likelihood(ax, p_y, extent, uvr_train=None, yr_train=None, class_icons=None, marker_options=None):
     h_p = ax.imshow(p_y, origin='lower', extent=extent, vmin=0.0, vmax=1.0)
     h_pc = ax.contour(p_y, levels=[0.5], origin='lower', linewidths=2, extent=extent)
     plt.clabel(h_pc, inline=1, fontsize=10)
     ax.get_figure().colorbar(h_p, ax=ax)
+
+    if uvr_train is not None: # and xt.shape[0] > 0:
+        for uv, y in zip(uvr_train, yr_train):
+            ax.plot(uv[0], uv[1], class_icons[(y[0] + 1) / 2], **marker_options)
     return h_p
 
 def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train=None, ya_train=None, uvr_train=None, fuvr_train=None, yr_train=None,
@@ -81,27 +111,15 @@ def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train=None, 
 
     # True latent
     plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])
+    if uvr_train is not None:
+        plot_relative_queries(ax_l, uvr_train, fuvr_train, yr_train, class_icons, marker_options)
 
     # True absolute likelihood
-    dely = y_samples[1, 0] - y_samples[0, 0]
-    abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0] - 0.5*dely, y_samples[-1, 0] + 0.5*dely]
-    vmax = max(1.0, p_a_y.max())
-    h_pat = ax_a.imshow(p_a_y, origin='lower', extent=abs_extent, aspect='auto', vmin=0.0, vmax=vmax)
-    if xa_train is not None and xa_train.shape[0] > 0:
-        ax_a.plot(xa_train, ya_train, 'w+')
-    h_yt, = ax_a.plot(xt, mu_t, c=lines[0])
-    ax_a.legend([h_yt], ['$E[y]$'])
-    ax_a.set_xlim(xt[0], xt[-1])
-    fig.colorbar(h_pat, ax=ax_a)
+    h_pat = plot_absolute_likelihood(ax_a, p_a_y, xt, mu_t, y_samples, xa_train=xa_train, ya_train=ya_train)
 
     # True relative likelihood
     rel_y_extent = [xt[0, 0], xt[-1, 0], xt[0, 0], xt[-1, 0]]
-    h_prt = plot_relative_likelihood(ax_r, p_r_y, extent=rel_y_extent)
-    if uvr_train is not None and xt.shape[0] > 0:
-        for uv, fuv, y in zip(uvr_train, fuvr_train, yr_train):
-            ax_r.plot(uv[0], uv[1], class_icons[(y[0] + 1) / 2], **marker_options)
-            ax_l.plot(uv, fuv, 'b-', color=lighten(lines[0]))
-            ax_l.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], class_icons[(y[0] + 1) / 2], **marker_options)
+    h_prt = plot_relative_likelihood(ax_r, p_r_y, rel_y_extent, uvr_train, yr_train, class_icons, marker_options)
     return fig, (ax_l, ax_a, ax_r)
 
 def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
@@ -116,33 +134,18 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
 
     # Latent function
     hf, hpf = plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])
-
     hf_hat, hpf_hat = plot_with_bounds(ax_l, xt, fhat, np.sqrt(np.atleast_2d(vhat.diagonal()).T), c=lines[1])
+    if uvr_train is not None:
+        plot_relative_queries(ax_l, uvr_train, fuvr_train, yr_train, class_icons, marker_options)
 
     ax_l.legend([hf, hf_hat], [r'True latent function, $f(x)$', r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
 
     # Absolute posterior likelihood
-    dely = y_samples[1, 0]-y_samples[0, 0]
-    abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0]-0.5*dely, y_samples[-1, 0]+0.5*dely]
-    vmax = max(1.0, p_a_y.max())
-    h_pap = ax_a.imshow(p_a_y, origin='lower', extent=abs_extent, aspect='auto')
-    h_yt, = ax_a.plot(xt, mu_t, c=lines[0])
-    hEy, = ax_a.plot(xt, E_y, color=lines[3])
-    if xa_train.shape[0] > 0:
-        ax_a.plot(xa_train, ya_train, 'w+')
-    ax_a.set_xlim(xt[0], xt[-1])
-    ax_a.legend([h_yt, hEy],
-                  [r'True mean, $E[y]$', r'Posterior mean, $E_{p(y|\mathcal{Y})}\left[y\right]$'])
-    fig.colorbar(h_pap, ax=ax_a)
+    plot_absolute_likelihood(ax_a, p_a_y, xt, mu_t, y_samples, E_y=E_y, xa_train=xa_train, ya_train=xa_train)
 
     # Relative posterior likelihood
     rel_y_extent = [xt[0, 0], xt[-1, 0], xt[0, 0], xt[-1, 0]]
-    h_prp = plot_relative_likelihood(ax_r, p_r_y, extent=rel_y_extent)
-    if uvr_train.shape[0] > 0:
-        for uv, fuv, y in zip(uvr_train, fuvr_train, yr_train):
-            ax_r.plot(uv[0], uv[1], class_icons[(y[0] + 1) / 2], **marker_options)
-            ax_l.plot(uv, fuv, 'b-', color=lighten(lines[0]))
-            ax_l.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], class_icons[(y[0] + 1) / 2], **marker_options)
+    h_prp = plot_relative_likelihood(ax_r, p_r_y, rel_y_extent, uvr_train, yr_train, class_icons, marker_options)
 
     return fig, (ax_l, ax_a, ax_r)
 

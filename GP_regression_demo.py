@@ -8,8 +8,9 @@ plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
 f_sigma = 0.15
-n_samples = 6
-r_seed = 2
+n_samples = 10
+r_seed = 1
+n_posterior_samples = 3
 optimise_hp = False
 
 # Define polynomial function to be modelled
@@ -22,29 +23,30 @@ def true_function(x):
 
 # Define noisy observation function
 def obs_function(x, sigma):
-    y = true_function(x) + np.random.normal(0, sigma, len(x))
+    y = true_function(x) + np.random.normal(0, sigma, size=x.shape)
     return y
 
 
 # Main program
 # Plot true function
-x_plot = np.arange(-0.5, 1.5, 0.01, dtype='float')
+x_plot = np.atleast_2d(np.arange(-0.5, 1.5, 0.01, dtype='float')).T
 fx_plot = true_function(x_plot)
 plt.figure()
 plt.plot(x_plot, fx_plot, 'k-')
 
 # Training data
 np.random.seed(r_seed)
-x_train = 0.6*np.random.random(n_samples)+0.2
+x_train = np.atleast_2d(0.6*np.random.random(n_samples)+0.2).T
+# x_train = np.array([-10.0])
 y_train = obs_function(x_train, f_sigma)
-plt.plot(x_train,y_train,'rx')
+plt.plot(x_train, y_train, 'rx')
 
 # Test data
 x_test = x_plot
 
 # GP hyperparameters
 # note: using log scaling to aid learning hyperparameters with varied magnitudes
-log_hyp = np.log([0.36, 1.3, 0.2])
+log_hyp = np.log([0.3, 1.0, 0.2])
 mean_hyp = 0
 like_hyp = 0
 
@@ -57,18 +59,22 @@ if optimise_hp:
 else:
     opt_log_hyp = log_hyp
 
-# Learnt GP with optimised hyperparameters
+# Learned GP with optimised hyperparameters
 optGP = GPr.GaussianProcess(opt_log_hyp,mean_hyp,like_hyp,"SE","zero","zero",x_train,y_train)
 fhat_test, fhat_var = optGP.compute_prediction(x_test)
 
 h_fig,h_ax = plt.subplots()
 h_fx, patch_fx = ptt.plot_with_bounds(h_ax, x_plot, fx_plot, f_sigma, c=ptt.lines[0])
 h_y, = h_ax.plot(x_train, y_train, 'rx', mew=1.0, ms=8)
-h_fhat, patch_fhat = ptt.plot_with_bounds(h_ax, x_plot, fhat_test, np.sqrt(fhat_var.diagonal()), c=ptt.lines[1], ls='--')
+h_fhat, patch_fhat = ptt.plot_with_bounds(h_ax, x_plot, fhat_test, np.sqrt(fhat_var.diagonal())[np.newaxis].T, c=ptt.lines[1], ls='--')
+f_post = np.random.multivariate_normal(fhat_test.flatten(), fhat_var, n_posterior_samples)
+h_pp = h_ax.plot(x_plot, f_post.T, '--', color='grey', lw=0.8)
+h_ax.autoscale()
+
 # h_pp = h_ax.plot(x_plot, y_post.T, c='grey', ls='--', lw=0.8)
 
-h_ax.set_ylim([-3, 3])
-gp_str = '$\hat{{f}}(x) \sim \mathcal{{GP}}(l={0:0.2f}, \sigma_f={1:0.2f}, \sigma_n={2:0.2f})$'
+# h_ax.set_ylim([-3, 3])
+gp_str = '$\hat{{f}}(x)|\mathcal{{Y}} \sim \mathcal{{GP}}(\mathbf{{0}}, K_{{SE}}:l={0:0.2f}, \sigma_f={1:0.2f}, \sigma_n={2:0.2f})$'
 gp_l, gp_sigf, gp_sign = optGP.covFun.hyp
 gp_str = gp_str.format(gp_l, gp_sigf, gp_sign)
 h_ax.legend((h_fx, h_y, h_fhat),('$f(x)$', '$y \sim \mathcal{{N}}(f(x), {0:0.1f}^2)$'.format(f_sigma), gp_str), loc='best')
