@@ -94,6 +94,7 @@ if d_x is 1:
         ptt.estimate_plots(x_test, f_true, mu_true, fhat, vhat, E_y, wave['rel_obs_params']['sigma'],
                            abs_y_samples, p_abs_y_post, p_rel_y_post,
                            x_abs, y_abs, x_rel[uvi_rel][:,:,0], fuv_rel, y_rel, n_posterior_samples=n_posterior_samples,
+                           posterior_plot_kwargs={'color':'grey', 'ls':'--'},
                            t_a=r'Posterior absolute likelihood, $p(u | \mathcal{Y}, \theta)$',
                            t_r=r'Posterior relative likelihood $P(x_0 \succ x_1 | \mathcal{Y}, \theta)$')
     p_err = test_data.rel_error(mu_true, p_rel_y_true, E_y, p_rel_y_post, weight=False)

@@ -124,13 +124,14 @@ def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train=None, 
 
 def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
                    y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
-                   class_icons = ['ko', 'wo'], marker_options = {'mec':'k', 'mew':0.5}, n_posterior_samples=0, *args, **kwargs):
+                   class_icons = ['ko', 'wo'], marker_options = {'mec':'k', 'mew':0.5}, n_posterior_samples=0,
+                   posterior_plot_kwargs={}, **kwargs):
     fig, (ax_l, ax_a, ax_r) = plot_setup_1d(**kwargs)
 
     # Posterior samples
     if n_posterior_samples > 0:
         f_post = np.random.multivariate_normal(fhat.flatten(), vhat, n_posterior_samples)
-        h_pp = ax_l.plot(xt, f_post.T, lw=0.8)
+        h_pp = ax_l.plot(xt, f_post.T, lw=0.8, **posterior_plot_kwargs)
 
     # Latent function
     hf, hpf = plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])
