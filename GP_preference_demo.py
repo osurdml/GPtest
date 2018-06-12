@@ -1,4 +1,4 @@
-# Simple 1D GP classification example
+# Simple example showing GP estimate with relative and/or absolute observations
 import numpy as np
 import matplotlib.pyplot as plt
 import GPpref
@@ -14,7 +14,7 @@ train_hyper = False
 use_test_data = False # test_data.data3 #
 verbose = 2
 
-with open('./data/low_freq_2.yaml', 'rt') as fh:
+with open('./data/statruns_jan2018.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
 try:
     np.random.seed(wave['statrun_params']['randseed'])
@@ -25,7 +25,7 @@ random_wave = test_data.MultiWave(n_dimensions=d_x, **wave['wave_params'])
 log_hyp = np.log(wave['hyperparameters'])
 
 n_rel_train = 5
-n_abs_train = 0
+n_abs_train = 5
 
 n_xplot = 101
 n_posterior_samples = 3
@@ -45,8 +45,6 @@ f_true = abs_obs_fun.f(x_test)
 mu_true = abs_obs_fun.mean_link(x_test)
 abs_y_samples = abs_obs_fun.l.y_list
 p_abs_y_true = abs_obs_fun.observation_likelihood_array(x_test, abs_y_samples)
-if d_x is 1:
-    p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
 
 # Training data - this is a bit weird, but we sample x values, then the uv pairs
 # are actually indexes into x, because it is easier computationally. You can 
@@ -82,40 +80,34 @@ wrms = test_data.wrms(mu_true, E_y)
 wrms2 = test_data.wrms_misclass(mu_true, E_y)
 
 if d_x is 1:
+    p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
     p_rel_y_post = prefGP.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
+else:
+    p_rel_y_true, p_rel_y_post = None, None
 
+if d_x <= 2:
     # Plot true functions
-    fig_t, (ax_t_l, ax_t_a, ax_t_r) = ptt.true_plots(x_test, f_true, mu_true, wave['rel_obs_params']['sigma'],
-                                                     abs_y_samples, p_abs_y_true, p_rel_y_true,
-                                                     t_l=r'True latent function, $f(x)$')
+    fig_t, ax_t = ptt.true_plots(x_test, f_true, mu_true, wave['rel_obs_params']['sigma'],
+                                 abs_y_samples, p_abs_y_true, p_rel_y_true,
+                                 t_l=r'True latent function, $f(x)$')
 
     # Posterior estimates
-    fig_p, (ax_p_l, ax_p_a, ax_p_r) = \
+    fig_p, ax_p = \
         ptt.estimate_plots(x_test, f_true, mu_true, fhat, vhat, E_y, wave['rel_obs_params']['sigma'],
                            abs_y_samples, p_abs_y_post, p_rel_y_post,
-                           x_abs, y_abs, x_rel[uvi_rel][:,:,0], fuv_rel, y_rel, n_posterior_samples=n_posterior_samples,
+                           x_abs, y_abs, x_rel[uvi_rel], fuv_rel, y_rel, n_posterior_samples=n_posterior_samples,
                            posterior_plot_kwargs={'color':'grey', 'ls':'--'},
+                           t_l=r'$\mathcal{GP}$ latent function estimate $\hat{f}(x)$',
                            t_a=r'Posterior absolute likelihood, $p(u | \mathcal{Y}, \theta)$',
                            t_r=r'Posterior relative likelihood $P(x_0 \succ x_1 | \mathcal{Y}, \theta)$')
-    p_err = test_data.rel_error(mu_true, p_rel_y_true, E_y, p_rel_y_post, weight=False)
-    print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}, p_err: {2:0.3f}".format(wrms, wrms2, p_err)
+    if d_x == 1:
+        p_err = test_data.rel_error(mu_true, p_rel_y_true, E_y, p_rel_y_post, weight=False)
+        print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}, p_err: {2:0.3f}".format(wrms, wrms2, p_err)
+
+    else:
+        print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}".format(wrms, wrms2)
+
     plt.show(block=False)
-
-
-elif d_x is 2:
-    # Plot true functions
-    fig_t, (ax_t_l, ax_t_a) = ptt.true_plots2D(x_test, f_true, mu_true, wave['rel_obs_params']['sigma'],
-                                                     abs_y_samples, p_abs_y_true, t_l=r'True latent function, $f(x)$')
-
-    # Posterior estimates
-    fig_p, (ax_p_l, ax_p_a) = \
-        ptt.estimate_plots2D(x_test, f_true, mu_true, fhat, vhat, E_y, wave['rel_obs_params']['sigma'],
-                           abs_y_samples, p_abs_y_post, x_abs, y_abs, x_rel[uvi_rel], fuv_rel, y_rel,
-                             t_l=r'$\mathcal{GP}$ latent function estimate $\hat{f}(x)$',
-                             t_a=r'Posterior absolute likelihood, $p(u | \mathcal{Y}, \theta)$')
-    print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}".format(wrms, wrms2)
-    plt.show(block=False)
-
 
 else:
     print "Input state space dimension: {0} is too high to plot".format(d_x)

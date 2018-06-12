@@ -132,11 +132,11 @@ class DoubleMultiWave(object):
 
 
 class WaveSaver(object):
-    def __init__(self, n_trials, n_components):
-        self.amplitude = np.zeros((n_trials, n_components), dtype='float')
-        self.frequency = np.zeros((n_trials, n_components), dtype='float')
-        self.offset = np.zeros((n_trials, n_components), dtype='float')
-        self.damping = np.zeros((n_trials, n_components), dtype='float')
+    def __init__(self, n_trials, n_components, n_dim=1):
+        self.amplitude = np.zeros((n_trials, n_components, n_dim), dtype='float')
+        self.frequency = np.zeros((n_trials, n_components, n_dim), dtype='float')
+        self.offset = np.zeros((n_trials, n_components, n_dim), dtype='float')
+        self.damping = np.zeros((n_trials, n_components, n_dim), dtype='float')
         self.n = 0
 
     def set_vals(self, n, a, f, o, d):
