@@ -13,9 +13,9 @@ nowstr = time.strftime("%Y_%m_%d-%H_%M")
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
-save_plots = False
+save_plots = True
 
-with open('./data/statruns_nov2017.yaml', 'rt') as fh:
+with open('./data/params.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
 
 try:
@@ -61,15 +61,15 @@ p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
 
 # Training data - note the shifted domain to get the sample out of the way
 far_domain = np.array([[-3.0], [-2.0]])
-x_rel, uvi_rel, uv_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(n_rel_train, n_xdim=1, domain=far_domain)
+x_rel, uvi_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(n_rel_train, n_xdim=1, domain=far_domain)
 x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(n_abs_train, n_xdim=1, domain=far_domain)
 
 
 # Plot true functions
-fig_t, (ax_t_l, ax_t_a, ax_t_r) = ptt.true_plots(x_test, f_true, mu_true, rel_sigma,
-                                                 abs_y_samples, p_abs_y_true, p_rel_y_true,
-                                                 x_abs, y_abs, uv_rel, fuv_rel, y_rel,
-                                                 t_l=r'True latent function, $f(x)$')
+fig_t, (ax_t_l, ax_t_a, ax_t_r) = ptt.true_plots(x_test, f_true, mu_true, wave['rel_obs_params']['sigma'],
+                                                     abs_y_samples, p_abs_y_true, p_rel_y_true,
+                                                     t_l=r'True latent function, $f(x)$')
+
 if save_plots:
     fig_t.savefig(fig_dir+'true.pdf', bbox_inches='tight')
 

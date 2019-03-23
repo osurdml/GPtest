@@ -122,7 +122,7 @@ fh3.colorbar(h_pat, ax=ah3[1])
 # ah4.set_xlabel('$y$')
 # ah4.set_ylabel('$p(y|f)$')
 # ah4.set_title('Symmetric beta likelihood')
-plt.show()
+plt.show(block=False)
 
 
 

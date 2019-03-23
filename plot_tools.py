@@ -45,26 +45,31 @@ def plot_with_bounds(ax, x, y, s, c=lines[0], lw=1.5, *args, **kwargs):
     ax.set_ylim(bottom = min(clim[0],xy[:,1].min()), top = max(clim[1], xy[:,1].max()))
     return h_fx, h_patch
 
+
+def _set_subplot_labels(ax, xlabel='$x$', ylabel='$f(x)$', title=''):
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+
+def plot_setup_1drel(t_l = r'Latent function, $f(x)$', t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$'):
+    fig, (ax_l, ax_r) = plt.subplots(1, 2)
+    fig.set_size_inches(8.7, 3.2)
+    _set_subplot_labels(ax_l, title=t_l)                                    # Latent function
+    _set_subplot_labels(ax_r, xlabel='$x_0$', ylabel='$x_1$', title=t_r)    # Relative likelihood
+    return fig, (ax_l, ax_r)
+
+
 def plot_setup_1d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(y | f(x))$',
                   t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$'):
 
     fig, (ax_l, ax_a, ax_r) = plt.subplots(1, 3)
     fig.set_size_inches(14.7, 3.5)
 
-    # Latent function
-    ax_l.set_title(t_l)
-    ax_l.set_xlabel('$x$')
-    ax_l.set_ylabel('$f(x)$')
+    _set_subplot_labels(ax_l, title=t_l)                                    # Latent function
+    _set_subplot_labels(ax_a, ylabel='$y$', title=t_a)                      # Absolute likelihood
+    _set_subplot_labels(ax_r, xlabel='$x_0$', ylabel='$x_1$', title=t_r)    # Relative likelihood
 
-    # Absolute likelihood
-    ax_a.set_title(t_a)
-    ax_a.set_xlabel('$x$')
-    ax_a.set_ylabel('$y$')
-
-    # Relative likelihood
-    ax_r.set_title(t_r)
-    ax_r.set_xlabel('$x_0$')
-    ax_r.set_ylabel('$x_1$')
     return fig, (ax_l, ax_a, ax_r)
 
 
@@ -142,7 +147,7 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     ax_l.legend([hf, hf_hat], [r'True latent function, $f(x)$', r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
 
     # Absolute posterior likelihood
-    plot_absolute_likelihood(ax_a, p_a_y, xt, mu_t, y_samples, E_y=E_y, xa_train=xa_train, ya_train=xa_train)
+    plot_absolute_likelihood(ax_a, p_a_y, xt, mu_t, y_samples, E_y=E_y, xa_train=xa_train, ya_train=ya_train)
 
     # Relative posterior likelihood
     rel_y_extent = [xt[0, 0], xt[-1, 0], xt[0, 0], xt[-1, 0]]

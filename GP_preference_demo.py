@@ -14,7 +14,7 @@ train_hyper = False
 use_test_data = False # test_data.data3 #
 verbose = 2
 
-with open('./data/low_freq_2.yaml', 'rt') as fh:
+with open('./data/statruns_2D.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
 try:
     np.random.seed(wave['statrun_params']['randseed'])
@@ -25,9 +25,9 @@ random_wave = test_data.MultiWave(n_dimensions=d_x, **wave['wave_params'])
 log_hyp = np.log(wave['hyperparameters'])
 
 n_rel_train = 5
-n_abs_train = 0
+n_abs_train = 5
 
-n_xplot = 101
+n_xplot = 21
 n_posterior_samples = 3
 
 random_wave.print_values()
