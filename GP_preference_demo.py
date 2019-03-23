@@ -27,7 +27,7 @@ log_hyp = np.log(wave['hyperparameters'])
 n_rel_train = 5
 n_abs_train = 5
 
-n_xplot = 21
+n_xplot = 101
 n_posterior_samples = 3
 
 random_wave.print_values()
@@ -82,8 +82,12 @@ wrms = test_data.wrms(mu_true, E_y)
 wrms2 = test_data.wrms_misclass(mu_true, E_y)
 
 if d_x is 1:
+    p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
     p_rel_y_post = prefGP.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
+else:
+    p_rel_y_true, p_rel_y_post = None, None
 
+if d_x <= 2:
     # Plot true functions
     fig_t, (ax_t_l, ax_t_a, ax_t_r) = ptt.true_plots(x_test, f_true, mu_true, wave['rel_obs_params']['sigma'],
                                                      abs_y_samples, p_abs_y_true, p_rel_y_true,

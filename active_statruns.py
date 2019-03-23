@@ -18,7 +18,7 @@ yaml_config ='./data/statruns_dec2017.yaml'
 
 parser = argparse.ArgumentParser(description='Statruns for active learning with preference GP')
 parser.add_argument('-np', '--no-plots', dest='make_plots', action='store_false', help='Turn off plots (default False)')
-parser.add_argument('yaml_config', default=yaml_config, help='YAML config file')
+parser.add_argument('-y', '--yaml-config', default=yaml_config, help='YAML config file')
 
 args = parser.parse_args()
 
@@ -44,19 +44,20 @@ else:
 n_rel_samples = run_parameters['statrun_params']['n_rel_samples']
 
 # Define polynomial function to be modelled
-random_wave  = test_data.MultiWave(**run_parameters['wave_params'])
+d_x = run_parameters['GP_params']['hyper_counts'][0]-1
+random_wave  = test_data.MultiWave(n_dimensions=d_x, **run_parameters['wave_params'])
 
 now_time = time.strftime("%Y_%m_%d-%H_%M")
 data_dir = 'data/' + now_time + '/'
 ptt.ensure_dir(data_dir)
 print "Data will be saved to: {0}".format(data_dir)
-waver = test_data.WaveSaver(n_trials, random_wave.n_components)
+waver = test_data.WaveSaver(n_trials, random_wave.n_components, n_dim=d_x)
 
 
 # True function
 x_plot = np.linspace(0.0, 1.0, statrun_params['n_xtest'], dtype='float')
-x_test = np.atleast_2d(x_plot).T
-far_domain = np.array([[-3.0], [-2.0]])
+x_test = ptt.make_meshlist(x_plot, d_x)
+far_domain = np.tile(np.array([[-3.0], [-2.0]]), d_x)
 
 # Construct active learner objects
 n_learners = len(run_parameters['learners'])
@@ -102,9 +103,9 @@ while trial_number < n_trials:
             p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
 
         # Initial data
-        x_rel, uvi_rel, uv_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(statrun_params['n_rel_train'],
-                                                                                     n_xdim=1, domain=far_domain)
-        x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(statrun_params['n_abs_train'], n_xdim=1,
+        x_rel, uvi_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(statrun_params['n_rel_train'],
+                                                                                     n_xdim=d_x, domain=far_domain)
+        x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(statrun_params['n_abs_train'], n_xdim=d_x,
                                                                                      domain=far_domain)
         model_kwargs = {'x_rel': x_rel, 'uvi_rel': uvi_rel, 'x_abs': x_abs, 'y_rel': y_rel, 'y_abs': y_abs,
                         'rel_kwargs': run_parameters['rel_obs_params'], 'abs_kwargs': run_parameters['abs_obs_params']}

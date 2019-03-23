@@ -13,9 +13,9 @@ nowstr = time.strftime("%Y_%m_%d-%H_%M")
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
-save_plots = True
+save_plots = False
 
-with open('./data/params.yaml', 'rt') as fh:
+with open('./data/shortrun_2D.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
 
 try:
@@ -28,14 +28,15 @@ except KeyError:
     n_abs_train = 0
     n_queries = 20
 
-n_xplot = 101
+n_xplot = 31
 keep_f = True
 learner_index = -1
 
 log_hyp = np.log(wave['hyperparameters'])
 
 # Define polynomial function to be modelled
-random_wave = test_data.MultiWave(**wave['wave_params'])
+d_x = wave['GP_params']['hyper_counts'][0]-1
+random_wave = test_data.MultiWave(n_dimensions=d_x, **wave['wave_params'])
 true_function = random_wave.out
 random_wave.print_values()
 
@@ -52,24 +53,28 @@ rel_sigma = wave['rel_obs_params']['sigma']
 
 # True function
 x_plot = np.linspace(0.0,1.0,n_xplot,dtype='float')
-x_test = np.atleast_2d(x_plot).T
+x_test = ptt.make_meshlist(x_plot, d_x)
 f_true = abs_obs_fun.f(x_test)
 mu_true = abs_obs_fun.mean_link(x_test)
 abs_y_samples = abs_obs_fun.l.y_list
 p_abs_y_true = abs_obs_fun.observation_likelihood_array(x_test, abs_y_samples)
-p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
+if d_x is 1:
+    p_rel_y_true = rel_obs_fun.observation_likelihood_array(x_test)
+else:
+    p_rel_y_true = None
 
 # Training data - note the shifted domain to get the sample out of the way
-far_domain = np.array([[-3.0], [-2.0]])
-x_rel, uvi_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(n_rel_train, n_xdim=1, domain=far_domain)
-x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(n_abs_train, n_xdim=1, domain=far_domain)
+far_domain = np.tile(np.array([[-3.0], [-2.0]]), d_x)
+x_rel, uvi_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(n_rel_train, n_xdim=d_x, domain=far_domain)
+x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(n_abs_train, n_xdim=d_x, domain=far_domain)
 
 
 # Plot true functions
-fig_t, (ax_t_l, ax_t_a, ax_t_r) = ptt.true_plots(x_test, f_true, mu_true, wave['rel_obs_params']['sigma'],
-                                                     abs_y_samples, p_abs_y_true, p_rel_y_true,
-                                                     t_l=r'True latent function, $f(x)$')
-
+plot_kwargs = {'xlim':[0.0, 1.0], 'ylim':[0.0, 1.0]}
+fig_t, ax_t = ptt.true_plots(x_test, f_true, mu_true, rel_sigma,
+                                                 abs_y_samples, p_abs_y_true, p_rel_y_true,
+                                                 x_abs, y_abs, x_rel[uvi_rel], fuv_rel, y_rel,
+                                                 t_l=r'True latent function, $f(x)$', **plot_kwargs)
 if save_plots:
     fig_t.savefig(fig_dir+'true.pdf', bbox_inches='tight')
 
@@ -90,8 +95,7 @@ learner.model.set_hyperparameters(log_hyp)
 f = learner.model.solve_laplace()
 learner.model.print_hyperparameters()
 
-fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
-                                                                abs_y_samples)
+fig_p, ax_p = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel, abs_y_samples, **plot_kwargs)
 if save_plots:
     wave['learners'] = [learner_kwargs]
     with open(fig_dir+'params.yaml', 'wt') as fh:
@@ -111,7 +115,7 @@ for obs_num in range(n_queries):
     if next_x.shape[0] == 1:
         next_y, next_f = abs_obs_fun.generate_observations(next_x)
         learner.model.add_observations(next_x, next_y, keep_f=keep_f)
-        print 'Abs: x:{0}, y:{1}'.format(next_x[0], next_y[0]),
+        print '{n:02} - Abs: x:{0}, y:{1}'.format(next_x[0], next_y[0], n=obs_num+1),
     else:
         next_y, next_uvi, next_fx = rel_obs_fun.gaussian_multi_pairwise_sampler(next_x)
         next_fuv = next_fx[next_uvi][:, :, 0]
@@ -122,8 +126,7 @@ for obs_num in range(n_queries):
     f = learner.model.solve_laplace()
 
     if save_plots:
-        fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
-                                                                        abs_y_samples)
+        fig_p, ax_p = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel, abs_y_samples, **plot_kwargs)
         pdf_pages.savefig(fig_p, bbox_inches='tight')
         # fig_p.savefig(fig_dir+'posterior{0:02d}.pdf'.format(obs_num+1), bbox_inches='tight')
         plt.close(fig_p)
@@ -133,10 +136,9 @@ learner.model.print_hyperparameters()
 if save_plots:
     pdf_pages.close()
 else:
-    fig_post, (ax_p_l, ax_p_a, ax_p_r) = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
-                                                                    abs_y_samples)
+    fig_post, ax_p = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel, abs_y_samples, **plot_kwargs)
 
-plt.show()
+plt.show(block=False)
 print "Finished!"
 
 ## SCRAP

@@ -61,9 +61,9 @@ def plot_setup_1drel(t_l = r'Latent function, $f(x)$', t_r = r'Relative likeliho
 
 
 def plot_setup_1d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(y | f(x))$',
-                  t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$'):
+                  t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$', **kwargs):
 
-    fig, (ax_l, ax_a, ax_r) = plt.subplots(1, 3)
+    fig, (ax_l, ax_a, ax_r) = plt.subplots(1, 3, **kwargs)
     fig.set_size_inches(14.7, 3.5)
 
     _set_subplot_labels(ax_l, title=t_l)                                    # Latent function
@@ -107,9 +107,11 @@ def plot_relative_likelihood(ax, p_y, extent, uvr_train=None, yr_train=None, cla
             ax.plot(uv[0], uv[1], class_icons[(y[0] + 1) / 2], **marker_options)
     return h_p
 
-def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y, xa_train=None, ya_train=None, uvr_train=None, fuvr_train=None, yr_train=None,
+def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y=None, xa_train=None, ya_train=None, uvr_train=None, fuvr_train=None, yr_train=None,
                class_icons=['ko', 'wo'], marker_options={'mec':'k', 'mew':0.5}, *args, **kwargs):
-
+    if p_r_y is None:
+        return true_plots2D(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
+               class_icons, marker_options, *args, **kwargs)
 
     # Plot true function, likelihoods and observations
     fig, (ax_l, ax_a, ax_r) = plot_setup_1d(**kwargs)
@@ -131,6 +133,11 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
                    y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
                    class_icons = ['ko', 'wo'], marker_options = {'mec':'k', 'mew':0.5}, n_posterior_samples=0,
                    posterior_plot_kwargs={}, **kwargs):
+    if p_r_y is None:
+        return estimate_plots2D(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
+                         y_samples, p_a_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
+                         class_icons, marker_options, **kwargs)
+
     fig, (ax_l, ax_a, ax_r) = plot_setup_1d(**kwargs)
 
     # Posterior samples
@@ -157,11 +164,11 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
 
 # 2D Plot tools
 
-def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(y | f(x))$'):
+def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(y | f(x))$', t_r = None, **kwargs):
 
     fig = plt.figure()
-    ax_l = fig.add_subplot(121, projection='3d')
-    ax_a = fig.add_subplot(122, projection='3d')
+    ax_l = fig.add_subplot(121, projection='3d', **kwargs)
+    ax_a = fig.add_subplot(122, projection='3d', **kwargs)
     fig.set_size_inches(10.0, 3.5)
 
     # Latent function
