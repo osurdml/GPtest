@@ -2,6 +2,9 @@ import numpy as np
 import pandas
 import matplotlib.pyplot as plt
 
+# Get wine data:
+# wget -P data/wine_quality https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv
+# wget -P data/wine_quality https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-white.csv
 class WineQualityData(object):
 
     def __init__(self, data_file):
