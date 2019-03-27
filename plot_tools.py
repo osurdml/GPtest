@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 import matplotlib.cm as cm
+import matplotlib.colors
 from nice_plot_colors import *
 from cycler import cycler
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
@@ -232,7 +233,12 @@ def estimate_plots2D(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     # Latent function estimate
     # hf =ax_l.plot_wireframe(xx, yy, np.reshape(ft, (nx, nx)), color=lines[0])
     tfc = np.reshape(vhat.diagonal(), (nx, nx))
-    hf_hat = ax_l.plot_surface(xx, yy, np.reshape(fhat, (nx, nx)), facecolors=cc(tfc/tfc.max()))
+    norm = matplotlib.colors.Normalize(vmin=0, vmax=tfc.max())
+    hf_hat = ax_l.plot_surface(xx, yy, np.reshape(fhat, (nx, nx)), facecolors=cc(norm(tfc)))
+    m = cm.ScalarMappable(cmap=cc, norm=norm)
+    m.set_array([])
+    fig.colorbar(m, ax=ax_l)
+
     # ax_l.imshow(np.reshape(fhat, (nx, nx)), extent=[x0[0], x1[-1], x1[0], x1[1]], origin='lower', aspect='auto')
     # ax_l.legend([hf], [r'True latent function, $f(x)$']) #, r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
 

@@ -27,7 +27,7 @@ log_hyp = np.log(wave['hyperparameters'])
 n_rel_train = 5
 n_abs_train = 5
 
-n_xplot = 101
+n_xplot = 31
 n_posterior_samples = 3
 
 random_wave.print_values()
@@ -89,37 +89,25 @@ else:
 
 if d_x <= 2:
     # Plot true functions
-    fig_t, (ax_t_l, ax_t_a, ax_t_r) = ptt.true_plots(x_test, f_true, mu_true, wave['rel_obs_params']['sigma'],
+    fig_t, ax_t = ptt.true_plots(x_test, f_true, mu_true, wave['rel_obs_params']['sigma'],
                                                      abs_y_samples, p_abs_y_true, p_rel_y_true,
                                                      t_l=r'True latent function, $f(x)$')
 
     # Posterior estimates
-    fig_p, (ax_p_l, ax_p_a, ax_p_r) = \
+    fig_p, ax_p = \
         ptt.estimate_plots(x_test, f_true, mu_true, fhat, vhat, E_y, wave['rel_obs_params']['sigma'],
                            abs_y_samples, p_abs_y_post, p_rel_y_post,
-                           x_abs, y_abs, x_rel[uvi_rel][:,:,0], fuv_rel, y_rel, n_posterior_samples=n_posterior_samples,
+                           x_abs, y_abs, x_rel[uvi_rel], fuv_rel, y_rel, n_posterior_samples=n_posterior_samples,
                            posterior_plot_kwargs={'color':'grey', 'ls':'--'},
+                           t_l=r'$\mathcal{GP}$ latent function estimate $\hat{f}(x)$',
                            t_a=r'Posterior absolute likelihood, $p(u | \mathcal{Y}, \theta)$',
                            t_r=r'Posterior relative likelihood $P(x_0 \succ x_1 | \mathcal{Y}, \theta)$')
-    p_err = test_data.rel_error(mu_true, p_rel_y_true, E_y, p_rel_y_post, weight=False)
-    print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}, p_err: {2:0.3f}".format(wrms, wrms2, p_err)
+    if d_x == 1:
+        p_err = test_data.rel_error(mu_true, p_rel_y_true, E_y, p_rel_y_post, weight=False)
+        print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}, p_err: {2:0.3f}".format(wrms, wrms2, p_err)
+    else:
+        print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}".format(wrms, wrms2)
     plt.show(block=False)
-
-
-elif d_x is 2:
-    # Plot true functions
-    fig_t, (ax_t_l, ax_t_a) = ptt.true_plots2D(x_test, f_true, mu_true, wave['rel_obs_params']['sigma'],
-                                                     abs_y_samples, p_abs_y_true, t_l=r'True latent function, $f(x)$')
-
-    # Posterior estimates
-    fig_p, (ax_p_l, ax_p_a) = \
-        ptt.estimate_plots2D(x_test, f_true, mu_true, fhat, vhat, E_y, wave['rel_obs_params']['sigma'],
-                           abs_y_samples, p_abs_y_post, x_abs, y_abs, x_rel[uvi_rel], fuv_rel, y_rel,
-                             t_l=r'$\mathcal{GP}$ latent function estimate $\hat{f}(x)$',
-                             t_a=r'Posterior absolute likelihood, $p(u | \mathcal{Y}, \theta)$')
-    print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}".format(wrms, wrms2)
-    plt.show(block=False)
-
 
 else:
     print "Input state space dimension: {0} is too high to plot".format(d_x)
