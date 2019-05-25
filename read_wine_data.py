@@ -35,7 +35,7 @@ d_x = config['GP_params']['hyper_counts'][0]-1
 log_hyp = np.log(config['hyperparameters'])
 
 n_rel = 1
-n_abs = 100
+n_abs = 300
 x_rel = red_data.data.values[0:2*n_rel, 0:-1]
 uvi_rel = np.array([[0, 1]])
 fuv_rel = red_data.data.values[0:2*n_rel, -1]
@@ -51,4 +51,6 @@ prefGP = GPpref.PreferenceGaussianProcess(**model_kwargs)
 
 prefGP.set_hyperparameters(log_hyp)
 f = prefGP.calc_laplace(log_hyp)
+print np.exp(log_hyp)
 log_hyp_opt = op.fmin(prefGP.calc_nlml,log_hyp)
+print np.exp(log_hyp_opt)

@@ -94,7 +94,7 @@ if d_x <= 2:
                                                      t_l=r'True latent function, $f(x)$')
 
     # Posterior estimates
-    fig_p, ax_p = \
+    fig_p, ax_p, h_plotobj = \
         ptt.estimate_plots(x_test, f_true, mu_true, fhat, vhat, E_y, wave['rel_obs_params']['sigma'],
                            abs_y_samples, p_abs_y_post, p_rel_y_post,
                            x_abs, y_abs, x_rel[uvi_rel], fuv_rel, y_rel, n_posterior_samples=n_posterior_samples,

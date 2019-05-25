@@ -95,7 +95,7 @@ f = learner.solve_laplace()
 learner.print_hyperparameters()
 
 if save_plots:
-    fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+    fig_p, (ax_p_l, ax_p_a, ax_p_r), h_plotobj = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
                                                                     abs_y_samples, mc_samples)
     fig_a, ax_a = plt.subplots()
     pdf_pages.savefig(fig_p, bbox_inches='tight')
@@ -118,7 +118,7 @@ for obs_num in range(n_queries):
 
     f = learner.solve_laplace()
     if save_plots:
-        fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+        fig_p, (ax_p_l, ax_p_a, ax_p_r), h_plotobj = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
                                                                         abs_y_samples, mc_samples)
         pdf_pages.savefig(fig_p, bbox_inches='tight')
         # fig_p.savefig(fig_dir+'posterior{0:02d}.pdf'.format(obs_num+1), bbox_inches='tight')
@@ -127,7 +127,7 @@ for obs_num in range(n_queries):
 learner.print_hyperparameters()
 
 if not save_plots:
-    fig_p, (ax_p_l, ax_p_a, ax_p_r) = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+    fig_p, (ax_p_l, ax_p_a, ax_p_r), h_plotobj = learner.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
                                                                     abs_y_samples, mc_samples)
 else:
     pdf_pages.close()

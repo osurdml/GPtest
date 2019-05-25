@@ -64,7 +64,8 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
             x_test = x_test*np.diff(domain, axis=0) + domain[0, :]
         return x_test
 
-    def create_posterior_plot(self, x_test, f_true, mu_true, rel_sigma, fuv_train, abs_y_samples, **plot_kwargs):
+
+    def get_latent_ests(self, x_test, abs_y_samples ):
         # Latent predictions
         d_x = x_test.shape[1]
         fhat, vhat = self.predict_latent(x_test)
@@ -73,6 +74,13 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
             p_rel_y_post = self.rel_posterior_likelihood_array(fhat=fhat, varhat=vhat)
         else:
             p_rel_y_post = None
+        return fhat, vhat, p_abs_y_post, E_y, p_rel_y_post
+
+
+    def create_posterior_plot(self, x_test, f_true, mu_true, rel_sigma, fuv_train, abs_y_samples, **plot_kwargs):
+
+        fhat, vhat, p_abs_y_post, E_y, p_rel_y_post = self.get_latent_ests(x_test, abs_y_samples)
+
         x_train, uvi_train, x_abs_train, y_train, y_abs_train = self.get_observations()
         uv_train = x_train[uvi_train]
 
@@ -84,6 +92,22 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
                                t_l=r'$\mathcal{GP}$ latent function estimate $\hat{f}(x)$',
                                t_a=r'Posterior absolute likelihood, $p(y | \mathcal{Y}, \theta)$',
                                t_r=r'Posterior relative likelihood $P(x_0 \succ x_1 | \mathcal{Y}, \theta)$', **plot_kwargs)
+        return fig_p, ax_p, [fhat, vhat, p_abs_y_post, E_y, p_rel_y_post]
+
+    def update_posterior_plot(self, x_test, f_true, mu_true, rel_sigma, fuv_train, abs_y_samples,
+                              fhat, vhat, p_abs_y_post, E_y, p_rel_y_post, ax_p):
+        x_train, uvi_train, x_abs_train, y_train, y_abs_train = self.get_observations()
+        uv_train = x_train[uvi_train]
+
+        ptt.reset_axes2d(ax_p)
+        # Posterior estimates
+        fig_p, ax_p = \
+            ptt.estimate_plots(x_test, f_true, mu_true, fhat, vhat, E_y, rel_sigma,
+                               abs_y_samples, p_abs_y_post, p_rel_y_post,
+                               x_abs_train, y_abs_train, uv_train, fuv_train, y_train,
+                               t_l=r'$\mathcal{GP}$ latent function estimate $\hat{f}(x)$',
+                               t_a=r'Posterior absolute likelihood, $p(y | \mathcal{Y}, \theta)$',
+                               t_r=r'Posterior relative likelihood $P(x_0 \succ x_1 | \mathcal{Y}, \theta)$', ax=ax_p)
         return fig_p, ax_p
 
 

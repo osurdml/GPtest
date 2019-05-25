@@ -13,7 +13,9 @@ nowstr = time.strftime("%Y_%m_%d-%H_%M")
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
-save_plots = False
+save_plots = True
+plot_type = 'video_frames'  # 'pdf'
+inter_frames = 10
 
 with open('./data/shortrun_2D.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
@@ -30,7 +32,7 @@ except KeyError:
 
 n_xplot = 31
 keep_f = True
-learner_index = -1
+learner_index = -2
 
 log_hyp = np.log(wave['hyperparameters'])
 
@@ -45,7 +47,9 @@ if save_plots:
     fig_dir = 'fig/' + nowstr + '/'
     ptt.ensure_dir(fig_dir)
     print "Figures will be saved to: {0}".format(fig_dir)
-    pdf_pages = PdfPages(fig_dir+'posterior_all.pdf')
+    if plot_type == 'pdf':
+        pdf_pages = PdfPages(fig_dir+'posterior_all.pdf')
+
 
 rel_obs_fun = GPpref.RelObservationSampler(true_function, wave['GP_params']['rel_likelihood'], wave['rel_obs_params'])
 abs_obs_fun = GPpref.AbsObservationSampler(true_function, wave['GP_params']['abs_likelihood'], wave['abs_obs_params'])
@@ -71,11 +75,28 @@ x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(n_abs_train, n_xdim=d
 
 # Plot true functions
 plot_kwargs = {'xlim':[0.0, 1.0], 'ylim':[0.0, 1.0]}
+if plot_type != 'pdf':
+    if p_rel_y_true is None:
+        ax_t = [[], []]
+        fig_t = plt.figure()
+        fig_t.set_size_inches([11.44,  8.02])
+        ax_t[0].append(fig_t.add_subplot(221, projection='3d', **plot_kwargs))
+        ax_t[0].append(fig_t.add_subplot(222, projection='3d', **plot_kwargs))
+        ax_t[1].append(fig_t.add_subplot(223, projection='3d', **plot_kwargs))
+        ax_t[1].append(fig_t.add_subplot(224, projection='3d', **plot_kwargs))
+    else:
+        fig_t, ax_t = plt.subplots(2,3)
+    true_ax = ax_t[0]
+    est_ax = ax_t[1]
+else:
+    true_ax = None
+    est_ax = None
+
 fig_t, ax_t = ptt.true_plots(x_test, f_true, mu_true, rel_sigma,
                                                  abs_y_samples, p_abs_y_true, p_rel_y_true,
                                                  x_abs, y_abs, x_rel[uvi_rel], fuv_rel, y_rel,
-                                                 t_l=r'True latent function, $f(x)$', **plot_kwargs)
-if save_plots:
+                                                 t_l=r'True latent function, $f(x)$', ax=true_ax, **plot_kwargs)
+if save_plots and (plot_type is 'pdf'):
     fig_t.savefig(fig_dir+'true.pdf', bbox_inches='tight')
 
 # Construct active learner object
@@ -95,13 +116,15 @@ learner.model.set_hyperparameters(log_hyp)
 f = learner.model.solve_laplace()
 learner.model.print_hyperparameters()
 
-fig_p, ax_p = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel, abs_y_samples, **plot_kwargs)
+fig_p, ax_p, pre_data = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel, abs_y_samples, ax=est_ax, **plot_kwargs)
 if save_plots:
     wave['learners'] = [learner_kwargs]
     with open(fig_dir+'params.yaml', 'wt') as fh:
         yaml.safe_dump(wave, fh)
-    pdf_pages.savefig(fig_p, bbox_inches='tight')
-    # fig_p.savefig(fig_dir+'posterior00.pdf', bbox_inches='tight')
+    if plot_type is 'pdf':
+        pdf_pages.savefig(fig_p, bbox_inches='tight')
+    else:
+        fig_p.savefig(fig_dir+'posterior000.png', bbox_inches='tight')
 print learner_kwargs
 
 for obs_num in range(n_queries):
@@ -126,17 +149,34 @@ for obs_num in range(n_queries):
     f = learner.model.solve_laplace()
 
     if save_plots:
-        fig_p, ax_p = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel, abs_y_samples, **plot_kwargs)
-        pdf_pages.savefig(fig_p, bbox_inches='tight')
-        # fig_p.savefig(fig_dir+'posterior{0:02d}.pdf'.format(obs_num+1), bbox_inches='tight')
+        ptt.reset_axes2d(est_ax)
+        fig_p, ax_p, post_data = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+                                                                     abs_y_samples, ax=est_ax, **plot_kwargs)
+        if plot_type is 'pdf':
+            pdf_pages.savefig(fig_p, bbox_inches='tight')
+        else:
+            fig_p.savefig(fig_dir + 'posterior{0:03d}.png'.format((obs_num+1)*inter_frames), bbox_inches='tight')
+            for iframe in range(1, inter_frames):
+                scale = float(iframe)/inter_frames
+                if pre_data[-1] is None:
+                    pre_data = pre_data[:-1]
+                inter_data = [(1-scale)*pre + scale*post for pre, post in zip(pre_data, post_data)]
+                if len(inter_data) < len(post_data):
+                    inter_data.append(None)
+                fig_p, ax_p = learner.model.update_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
+                                                                     abs_y_samples, *inter_data, ax_p=est_ax)
+                fig_p.savefig(fig_dir + 'posterior{0:03d}.png'.format(obs_num*inter_frames + iframe), bbox_inches='tight')
+            pre_data = post_data
         plt.close(fig_p)
+        # fig_p.savefig(fig_dir+'posterior{0:02d}.pdf'.format(obs_num+1), bbox_inches='tight')
+
 
 learner.model.print_hyperparameters()
 
-if save_plots:
+if save_plots and plot_type is 'pdf':
     pdf_pages.close()
 else:
-    fig_post, ax_p = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel, abs_y_samples, **plot_kwargs)
+    fig_post, ax_p, h_plotobj = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel, abs_y_samples, **plot_kwargs)
 
 plt.show(block=False)
 print "Finished!"

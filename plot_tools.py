@@ -53,8 +53,12 @@ def _set_subplot_labels(ax, xlabel='$x$', ylabel='$f(x)$', title=''):
     ax.set_ylabel(ylabel)
 
 
-def plot_setup_1drel(t_l = r'Latent function, $f(x)$', t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$'):
-    fig, (ax_l, ax_r) = plt.subplots(1, 2)
+def plot_setup_1drel(t_l = r'Latent function, $f(x)$', t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$', ax=None, **kwargs):
+    if ax is None:
+        fig, (ax_l, ax_r) = plt.subplots(1, 2, **kwargs)
+    else:
+        (ax_l, ax_r) = ax
+        fig = ax_l.figure
     fig.set_size_inches(8.7, 3.2)
     _set_subplot_labels(ax_l, title=t_l)                                    # Latent function
     _set_subplot_labels(ax_r, xlabel='$x_0$', ylabel='$x_1$', title=t_r)    # Relative likelihood
@@ -62,10 +66,17 @@ def plot_setup_1drel(t_l = r'Latent function, $f(x)$', t_r = r'Relative likeliho
 
 
 def plot_setup_1d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(y | f(x))$',
-                  t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$', **kwargs):
+                  t_r = r'Relative likelihood, $P(x_0 \succ x_1 | f(x_0), f(x_1))$', ax = None, **kwargs):
 
-    fig, (ax_l, ax_a, ax_r) = plt.subplots(1, 3, **kwargs)
-    fig.set_size_inches(14.7, 3.5)
+    if ax is None:
+        fig = plt.figure()
+        ax_l = fig.add_subplot(131, **kwargs)
+        ax_a = fig.add_subplot(132, **kwargs)
+        ax_r = fig.add_subplot(133, **kwargs)
+        fig.set_size_inches(14.7, 3.5)
+    else:
+        (ax_l, ax_a, ax_r) = ax
+        fig = ax_l.figure
 
     _set_subplot_labels(ax_l, title=t_l)                                    # Latent function
     _set_subplot_labels(ax_a, ylabel='$y$', title=t_a)                      # Absolute likelihood
@@ -76,7 +87,7 @@ def plot_setup_1d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood,
 
 def plot_relative_queries(ax, uvr_train, fuvr_train, yr_train, class_icons, marker_options=None):
     for uv, fuv, y in zip(uvr_train, fuvr_train, yr_train):
-        ax.plot(uv, fuv, 'b-', color=lighten(lines[0]))
+        ax.plot(uv, fuv, 'b-', color=lighten(lines[0]), lw=0.8)
         ax.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], class_icons[(y[0] + 1) / 2], **marker_options)
 
 
@@ -95,7 +106,7 @@ def plot_absolute_likelihood(ax, p_a_y, xt, mu_t, y_samples, E_y=None, xa_train=
     ax.legend(h_lines, legend_entries)
     ax.set_xlim(xt[0], xt[-1])
     ax.get_figure().colorbar(h_pat, ax=ax)
-    return h_pat
+    return (h_pat, h_lines)
 
 def plot_relative_likelihood(ax, p_y, extent, uvr_train=None, yr_train=None, class_icons=None, marker_options=None):
     h_p = ax.imshow(p_y, origin='lower', extent=extent, vmin=0.0, vmax=1.0)
@@ -106,7 +117,7 @@ def plot_relative_likelihood(ax, p_y, extent, uvr_train=None, yr_train=None, cla
     if uvr_train is not None: # and xt.shape[0] > 0:
         for uv, y in zip(uvr_train, yr_train):
             ax.plot(uv[0], uv[1], class_icons[(y[0] + 1) / 2], **marker_options)
-    return h_p
+    return (h_p, h_pc)
 
 def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y=None, xa_train=None, ya_train=None, uvr_train=None, fuvr_train=None, yr_train=None,
                class_icons=['ko', 'wo'], marker_options={'mec':'k', 'mew':0.5}, *args, **kwargs):
@@ -130,6 +141,7 @@ def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y=None, xa_train=N
     h_prt = plot_relative_likelihood(ax_r, p_r_y, rel_y_extent, uvr_train, yr_train, class_icons, marker_options)
     return fig, (ax_l, ax_a, ax_r)
 
+
 def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
                    y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
                    class_icons = ['ko', 'wo'], marker_options = {'mec':'k', 'mew':0.5}, n_posterior_samples=0,
@@ -145,6 +157,8 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     if n_posterior_samples > 0:
         f_post = np.random.multivariate_normal(fhat.flatten(), vhat, n_posterior_samples)
         h_pp = ax_l.plot(xt, f_post.T, lw=0.8, **posterior_plot_kwargs)
+    else:
+        h_pp = None
 
     # Latent function
     hf, hpf = plot_with_bounds(ax_l, xt, ft, rel_sigma, c=lines[0])
@@ -155,22 +169,27 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     ax_l.legend([hf, hf_hat], [r'True latent function, $f(x)$', r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
 
     # Absolute posterior likelihood
-    plot_absolute_likelihood(ax_a, p_a_y, xt, mu_t, y_samples, E_y=E_y, xa_train=xa_train, ya_train=ya_train)
+    h_abs = plot_absolute_likelihood(ax_a, p_a_y, xt, mu_t, y_samples, E_y=E_y, xa_train=xa_train, ya_train=ya_train)
 
     # Relative posterior likelihood
     rel_y_extent = [xt[0, 0], xt[-1, 0], xt[0, 0], xt[-1, 0]]
-    h_prp = plot_relative_likelihood(ax_r, p_r_y, rel_y_extent, uvr_train, yr_train, class_icons, marker_options)
+    h_rel = plot_relative_likelihood(ax_r, p_r_y, rel_y_extent, uvr_train, yr_train, class_icons, marker_options)
 
     return fig, (ax_l, ax_a, ax_r)
 
+
 # 2D Plot tools
 
-def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(y | f(x))$', t_r = None, **kwargs):
+def plot_setup_2d(t_l = r'Latent function, $f(x)$', t_a = r'Absolute likelihood, $p(y | f(x))$', t_r = None, ax = None, **kwargs):
 
-    fig = plt.figure()
-    ax_l = fig.add_subplot(121, projection='3d', **kwargs)
-    ax_a = fig.add_subplot(122, projection='3d', **kwargs)
-    fig.set_size_inches(10.0, 3.5)
+    if ax is None:
+        fig = plt.figure()
+        ax_l = fig.add_subplot(121, projection='3d', **kwargs)
+        ax_a = fig.add_subplot(122, projection='3d', **kwargs)
+        fig.set_size_inches(10.0, 3.5)
+    else:
+        (ax_l, ax_a) = ax
+        fig = ax_l.figure
 
     # Latent function
     ax_l.set_title(t_l)
@@ -237,7 +256,7 @@ def estimate_plots2D(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     hf_hat = ax_l.plot_surface(xx, yy, np.reshape(fhat, (nx, nx)), facecolors=cc(norm(tfc)))
     m = cm.ScalarMappable(cmap=cc, norm=norm)
     m.set_array([])
-    fig.colorbar(m, ax=ax_l)
+    # ax_cb = fig.colorbar(m, ax=ax_l)
 
     # ax_l.imshow(np.reshape(fhat, (nx, nx)), extent=[x0[0], x1[-1], x1[0], x1[1]], origin='lower', aspect='auto')
     # ax_l.legend([hf], [r'True latent function, $f(x)$']) #, r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
@@ -258,17 +277,23 @@ def estimate_plots2D(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
 
     cc = cm.get_cmap('Blues')
     norm_py = p_a_y/p_a_y.max()
+    h_points = []
     for y, py in zip(y_samples, norm_py):
-        ax_a.scatter(xt[:, 0], xt[:, 1], y, s=py*15.0, marker='o', c=cc(py))
+        h_points.append(ax_a.scatter(xt[:, 0], xt[:, 1], y, s=py*15.0, marker='o', c=cc(py)))
 
     if xa_train.shape[0] > 0:
         ax_a.plot(xa_train[:,0], xa_train[:,1], ya_train.flat, 'r^', color=lines[1])
     ax_a.legend([hEy], [r'Posterior mean, $E_{p(y|\mathcal{Y})}\left[y\right]$'])
     # fig.colorbar(h_pap, ax=ax_a)
 
-
     return fig, (ax_l, ax_a)
 
+
+def reset_axes2d(est_ax):
+    for ax in est_ax:
+        ax.cla()
+        ax.set_xlim([0.0, 1.0])
+        ax.set_ylim([0.0, 1.0])
 
 def ensure_dir(file_path):
     directory = os.path.dirname(file_path)
