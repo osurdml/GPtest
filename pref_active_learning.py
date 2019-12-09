@@ -15,9 +15,9 @@ plt.rc('text', usetex=True)
 
 save_plots = True
 plot_type = 'video_frames'  # 'pdf'
-inter_frames = 10
+inter_frames = 30
 
-with open('./data/shortrun_2D.yaml', 'rt') as fh:
+with open('./fig/2017_11_13-15_11/params.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
 
 try:
@@ -30,9 +30,9 @@ except KeyError:
     n_abs_train = 0
     n_queries = 20
 
-n_xplot = 31
+n_xplot = 101
 keep_f = True
-learner_index = -2
+learner_index = -1
 
 log_hyp = np.log(wave['hyperparameters'])
 
@@ -86,6 +86,7 @@ if plot_type != 'pdf':
         ax_t[1].append(fig_t.add_subplot(224, projection='3d', **plot_kwargs))
     else:
         fig_t, ax_t = plt.subplots(2,3)
+        fig_t.set_size_inches([12,  7])
     true_ax = ax_t[0]
     est_ax = ax_t[1]
 else:
@@ -149,7 +150,7 @@ for obs_num in range(n_queries):
     f = learner.model.solve_laplace()
 
     if save_plots:
-        ptt.reset_axes2d(est_ax)
+        ptt.reset_axes(est_ax)
         fig_p, ax_p, post_data = learner.model.create_posterior_plot(x_test, f_true, mu_true, rel_sigma, fuv_rel,
                                                                      abs_y_samples, ax=est_ax, **plot_kwargs)
         if plot_type is 'pdf':
@@ -167,7 +168,7 @@ for obs_num in range(n_queries):
                                                                      abs_y_samples, *inter_data, ax_p=est_ax)
                 fig_p.savefig(fig_dir + 'posterior{0:03d}.png'.format(obs_num*inter_frames + iframe), bbox_inches='tight')
             pre_data = post_data
-        plt.close(fig_p)
+        # plt.close(fig_p)
         # fig_p.savefig(fig_dir+'posterior{0:02d}.pdf'.format(obs_num+1), bbox_inches='tight')
 
 

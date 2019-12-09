@@ -99,7 +99,7 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
         x_train, uvi_train, x_abs_train, y_train, y_abs_train = self.get_observations()
         uv_train = x_train[uvi_train]
 
-        ptt.reset_axes2d(ax_p)
+        ptt.reset_axes(ax_p)
         # Posterior estimates
         fig_p, ax_p = \
             ptt.estimate_plots(x_test, f_true, mu_true, fhat, vhat, E_y, rel_sigma,

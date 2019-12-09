@@ -91,7 +91,7 @@ def plot_relative_queries(ax, uvr_train, fuvr_train, yr_train, class_icons, mark
         ax.plot(uv[(y + 1) / 2], fuv[(y + 1) / 2], class_icons[(y[0] + 1) / 2], **marker_options)
 
 
-def plot_absolute_likelihood(ax, p_a_y, xt, mu_t, y_samples, E_y=None, xa_train=None, ya_train=None):
+def plot_absolute_likelihood(ax, p_a_y, xt, mu_t, y_samples, E_y=None, xa_train=None, ya_train=None, make_cbars=True):
     dely = y_samples[1, 0] - y_samples[0, 0]
     abs_extent = [xt[0, 0], xt[-1, 0], y_samples[0, 0] - 0.5*dely, y_samples[-1, 0] + 0.5*dely]
     vmax = max(1.0, p_a_y.max())
@@ -105,14 +105,16 @@ def plot_absolute_likelihood(ax, p_a_y, xt, mu_t, y_samples, E_y=None, xa_train=
         legend_entries.append(r'Posterior mean, $E_{p(y|\mathcal{Y})}\left[y\right]$')
     ax.legend(h_lines, legend_entries)
     ax.set_xlim(xt[0], xt[-1])
-    ax.get_figure().colorbar(h_pat, ax=ax)
+    if make_cbars:
+        h_cb = ax.get_figure().colorbar(h_pat, ax=ax)
     return (h_pat, h_lines)
 
-def plot_relative_likelihood(ax, p_y, extent, uvr_train=None, yr_train=None, class_icons=None, marker_options=None):
+def plot_relative_likelihood(ax, p_y, extent, uvr_train=None, yr_train=None, class_icons=None, marker_options=None, make_cbars=True):
     h_p = ax.imshow(p_y, origin='lower', extent=extent, vmin=0.0, vmax=1.0)
     h_pc = ax.contour(p_y, levels=[0.5], origin='lower', linewidths=2, extent=extent)
     plt.clabel(h_pc, inline=1, fontsize=10)
-    ax.get_figure().colorbar(h_p, ax=ax)
+    if make_cbars:
+        h_cb = ax.get_figure().colorbar(h_p, ax=ax)
 
     if uvr_train is not None: # and xt.shape[0] > 0:
         for uv, y in zip(uvr_train, yr_train):
@@ -145,7 +147,7 @@ def true_plots(xt, ft, mu_t, rel_sigma, y_samples, p_a_y, p_r_y=None, xa_train=N
 def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
                    y_samples, p_a_y, p_r_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
                    class_icons = ['ko', 'wo'], marker_options = {'mec':'k', 'mew':0.5}, n_posterior_samples=0,
-                   posterior_plot_kwargs={}, **kwargs):
+                   posterior_plot_kwargs={}, make_cbars=True, **kwargs):
     if p_r_y is None:
         return estimate_plots2D(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
                          y_samples, p_a_y, xa_train, ya_train, uvr_train, fuvr_train, yr_train,
@@ -169,11 +171,11 @@ def estimate_plots(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     ax_l.legend([hf, hf_hat], [r'True latent function, $f(x)$', r'$\mathcal{GP}$ estimate $\hat{f}(x)$'])
 
     # Absolute posterior likelihood
-    h_abs = plot_absolute_likelihood(ax_a, p_a_y, xt, mu_t, y_samples, E_y=E_y, xa_train=xa_train, ya_train=ya_train)
+    h_abs = plot_absolute_likelihood(ax_a, p_a_y, xt, mu_t, y_samples, E_y=E_y, xa_train=xa_train, ya_train=ya_train, make_cbars=make_cbars)
 
     # Relative posterior likelihood
     rel_y_extent = [xt[0, 0], xt[-1, 0], xt[0, 0], xt[-1, 0]]
-    h_rel = plot_relative_likelihood(ax_r, p_r_y, rel_y_extent, uvr_train, yr_train, class_icons, marker_options)
+    h_rel = plot_relative_likelihood(ax_r, p_r_y, rel_y_extent, uvr_train, yr_train, class_icons, marker_options, make_cbars=make_cbars)
 
     return fig, (ax_l, ax_a, ax_r)
 
@@ -289,8 +291,12 @@ def estimate_plots2D(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
     return fig, (ax_l, ax_a)
 
 
-def reset_axes2d(est_ax):
+def reset_axes(est_ax):
     for ax in est_ax:
+        if len(ax.images) > 0:
+            for im in ax.images:
+                if im.colorbar is not None:
+                    im.colorbar.remove()
         ax.cla()
         ax.set_xlim([0.0, 1.0])
         ax.set_ylim([0.0, 1.0])
