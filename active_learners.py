@@ -707,7 +707,7 @@ class OrdinalSampler(PeakComparitor):
                     V_abs += p_obs*self.test_observation(x, y_obs+1, None, x_test, y_threshold)
             if V_abs > V_max:
                 V_max = V_abs
-                x_best = x
+                x_best = np.array([x])
         if self.verbose >= 1:
             print 'V_max_abs = {0}, t = {1}s'.format(V_max, time.time() - t_rel)
 
