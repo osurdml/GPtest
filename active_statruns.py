@@ -56,7 +56,17 @@ waver = test_data.WaveSaver(n_trials, random_wave.n_components, n_dim=d_x)
 
 # True function
 x_plot = np.linspace(0.0, 1.0, statrun_params['n_xtest'], dtype='float')
-x_test = ptt.make_meshlist(x_plot, d_x)
+
+try:
+    if statrun_params['sample_type'] is 'uniform':
+        x_test = ptt.make_meshlist(x_plot, d_x)
+    else:
+        x_test = np.random.uniform(0.0, 1.0,
+                                   size = (statrun_params['n_xtest'], d_x))
+except KeyError:
+    print('Config does not contain statrun_params: sample_type value. Default to uniform sampling')
+    x_test = ptt.make_meshlist(x_plot, d_x)
+
 far_domain = np.tile(np.array([[-3.0], [-2.0]]), d_x)
 
 # Construct active learner objects
