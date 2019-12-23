@@ -1,6 +1,8 @@
 # Simple 1D GP classification example
 import time
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import GPpref
 import plot_tools as ptt
@@ -15,7 +17,7 @@ plt.rc('text', usetex=True)
 
 save_plots = True
 plot_type = 'video_frames'  # 'pdf'
-inter_frames = 10
+inter_frames = 30
 
 with open('./data/shortrun_2D.yaml', 'rt') as fh:
     wave = yaml.safe_load(fh)
