@@ -1,29 +1,18 @@
 import numpy as np
-import pandas
 import matplotlib.pyplot as plt
 import yaml
 import GPpref
 import scipy.optimize as op
-from utils.data_downloader import MrDataGrabber
+from utils.wine_data import WineQualityData
 
 
-class WineQualityData(object):
-    def __init__(self, data_file):
-        self.file = data_file
-        self.data = pandas.read_csv(self.file, delimiter=';')
-
-optimise_hyper = True
+optimise_hyper = False
 use_normalised = True
 R_limit = 0.1
 wine_type = 'white'
 
 # Get wine data:
-url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-{0}.csv'.format(wine_type)
-file_loc = 'data/wine_quality/'
-download_data = MrDataGrabber(url, file_loc)
-download_data.download()
-
-input_data = WineQualityData(download_data.target_file)
+input_data = WineQualityData(wine_type=wine_type)
 
 fh, ah = plt.subplots(1, 1)
 ah.hist(input_data.data.quality, np.arange(-0.5, 11, 1.0))
