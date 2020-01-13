@@ -2,8 +2,8 @@
 import numpy as np
 import scipy.optimize as op
 import matplotlib.pyplot as plt
-import GPr
-import plot_tools as ptt
+from gp_tools import GPr
+import utils.plot_tools as ptt
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 

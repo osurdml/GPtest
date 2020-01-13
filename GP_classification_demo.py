@@ -2,7 +2,7 @@
 import numpy as np
 import scipy.optimize as op
 import matplotlib.pyplot as plt
-import GPr
+from gp_tools import GPr
 from scipy.special import ndtr as std_norm_cdf
 np.random.seed(0)
 

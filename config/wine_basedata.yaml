@@ -1,0 +1,48 @@
+GP_params:
+  rel_likelihood: PrefProbit        # Relative likelihood function (in GPpref)
+  abs_likelihood: OrdinalProbit     # Absolute likelihood function (AbsBoundProbit or OrdinalProbit)
+  verbose: 0                        # Verbosity level
+  hyper_counts: [12, 1, 2]           # Number of hypers for GP cov, rel likelihood, abs likelihood
+# Hyperparameters are: [[l, sig_f], sig_rel, sig_beta, v_beta]
+hyperparameters: 
+  l: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+  sig_f: 1.0
+  sig_rel: 0.1
+  sig_beta: 0.4
+  v_beta: 1.2
+abs_obs_params: {sigma: 0.4, b: 1.2, n_ordinals: 6} # Ordinal logistic parameters
+rel_obs_params: {sigma: 0.1}                        # Relative logistic parameters
+wine_params:
+  type: 'red'
+  variables: 'all'
+  normalise_data: True
+statrun_params:
+  n_queries: 60
+  n_trials: 100
+  n_rel_train: 0
+  n_abs_train: 1
+  randseed: 1
+  n_best_points: 30
+  n_xtest: 200
+  calc_relative_error: False
+  n_rel_samples: 3
+# High tau for softmax is more random
+learners:
+  - name: Random (rel)
+    model_type: ActiveLearner
+    obs_args: {p_rel: 1.0, n_rel_samples: 3}
+  - name: Random (abs)
+    model_type: ActiveLearner
+    obs_args: {p_rel: 0.0, n_rel_samples: 3}
+  - name: Random ($p_{rel}=0.5$)
+    model_type: ActiveLearner
+    obs_args: {p_rel: 0.5, n_rel_samples: 3}
+  - name: MaxVar (abs)
+    model_type: MaxVar
+    obs_args: {p_rel: 0.0}
+  - name: UCB Latent (abs)
+    model_type: UCBLatent
+    obs_args: {gamma: 2.0} 
+  - name: HUCB ($p_{rel}=-1.0, w_v=0.75, \tau_r=0.1, \tau_a=0.05$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 3, p_rel: -1.0, rel_tau: 0.1, abs_tau: 0.05, w_v: 0.75, selector: entropy}

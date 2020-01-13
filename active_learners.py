@@ -1,7 +1,7 @@
 import numpy as np
-import GPpref
+from gp_tools import GPpref
 from scipy.stats import beta
-import plot_tools as ptt
+import utils.plot_tools as ptt
 import time
 import sys
 

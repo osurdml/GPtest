@@ -1,10 +1,10 @@
 # Simple 1D GP classification example
 import numpy as np
 import matplotlib.pyplot as plt
-import GPpref
+from gp_tools import GPpref
 import scipy.optimize as op
-import plot_tools as ptt
-import test_data
+import utils.plot_tools as ptt
+from utils import test_data
 import yaml
 # from scipy.stats import beta
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})

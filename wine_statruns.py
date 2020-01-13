@@ -1,13 +1,13 @@
 # Simple 1D GP classification example
 import time
 import numpy as np
+import GPpref
+import plot_tools as ptt
+import active_learners
+import test_data
+import plot_statruns
 import yaml
 import argparse
-import GPpref
-import active_learners
-import utils.plot_tools as ptt
-from utils import test_data
-from utils import plot_statruns
 
 np.set_printoptions(precision=3)
 wrms_fun = test_data.wrms_misclass
@@ -16,9 +16,10 @@ wrms_args = {'w_power': 1}
 now_time = time.strftime("%Y_%m_%d-%H_%M")
 yaml_config ='./data/statruns_dec2017.yaml'
 
-parser = argparse.ArgumentParser(description='Statruns for active learning with preference GP')
+parser = argparse.ArgumentParser(description='Statruns for active learning with preference GP - wine data')
 parser.add_argument('-np', '--no-plots', dest='make_plots', action='store_false', help='Turn off plots (default False)')
 parser.add_argument('-y', '--yaml-config', default=yaml_config, help='YAML config file')
+parser.add_argument('-w', '--wine-type', default='red', choices=['white', 'red'], help='Wine type')
 
 args = parser.parse_args()
 
@@ -45,6 +46,12 @@ n_rel_samples = run_parameters['statrun_params']['n_rel_samples']
 
 # Define polynomial function to be modelled
 d_x = run_parameters['GP_params']['hyper_counts'][0]-1
+
+# Get wine data set
+input_data = WineQualityData(wine_type=wine_type)
+wine_norm = (input_data.data.values - input_data.data.values.min(axis=0)) / (input_data.data.values.max(axis=0) - input_data.data.values.min(axis=0))
+
+
 random_wave  = test_data.MultiWave(n_dimensions=d_x, **run_parameters['wave_params'])
 
 now_time = time.strftime("%Y_%m_%d-%H_%M")

@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import GPpref
-import nice_plot_colors as npc
-import plot_tools
+from gp_tools import GPpref
+import utils.nice_plot_colors as npc
+from utils import plot_tools
 from scipy.stats import norm
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
