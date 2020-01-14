@@ -1,44 +1,63 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import yaml
+import argparse
 from gp_tools import GPpref
 import scipy.optimize as op
 from utils.wine_data import WineQualityData
 
+parser = argparse.ArgumentParser(description='Viewing and learning hypers from wine data')
+parser.add_argument('-np', '--no-plots', dest='make_plots', action='store_false', help='Turn off plots (default False)')
+parser.add_argument('-oh', '--optimise-hyper', action='store_true', help='Optimise hyperparameters')
+parser.add_argument('-R', '--R-limit', default=0.1, type=float, help='Remove dimensions with regression coffecient < R')
+parser.add_argument('-y', '--yaml-config', default='./config/wine_basedata.yaml', help='YAML config file')
+parser.add_argument('-o', '--yaml-out', default=None, help='YAML config file')
+parser.add_argument('-na', '--n-abs', default=300, type=int, help='Number of absolute training points')
+parser.add_argument('-nr', '--n-rel', default=1, type=int, help='Number of relative training points')
+args = parser.parse_args()
 
-optimise_hyper = True
-R_limit = 0.1
+optimise_hyper = args.optimise_hyper
+R_limit = args.R_limit
+make_plots = args.make_plots
 
 # Read config file
-with open('./config/wine_basedata.yaml', 'rt') as fh:
+with open(args.yaml_config, 'rt') as fh:
     config = yaml.safe_load(fh)
 
 wine_type = config['wine_params']['type']
-out_yaml = './config/learned_{0}_params.yaml'.format(wine_type)
+if optimise_hyper:
+    if args.yaml_out is None:
+        out_yaml = './config/learned_{0}_params.yaml'.format(wine_type)
+    else:
+        out_yaml = args.yaml_out
 
 # Get wine data:
-input_data = WineQualityData(wine_type=wine_type, cols='all', norm=config['wine_params']['normalise_data'], scale_y=False)
+input_data = WineQualityData(wine_type=wine_type, cols=config['wine_params']['variables'], norm=config['wine_params']['normalise_data'], scale_y=False)
+print('Loaded {0} wine data. Contains {1} samples, {2} input dimensions loaded'.format(wine_type, input_data.x.shape[0], input_data.x.shape[1]))
 
-fh, ah = plt.subplots(1, 1)
-ah.hist(input_data.y, np.arange(-0.5, 11, 1.0))
-ah.set_xticks(np.arange(11))
-ah.set_xlabel('Score')
-ah.set_ylabel('Count')
-ah.set_title('{0} wine'.format(input_data.type))
+if make_plots:
+    fh, ah = plt.subplots(1, 1)
+    ah.hist(input_data.y, np.arange(-0.5, 11, 1.0))
+    ah.set_xticks(np.arange(11))
+    ah.set_xlabel('Score')
+    ah.set_ylabel('Count')
+    ah.set_title('{0} wine'.format(input_data.type))
 
-fh2, ah2 = plt.subplots(3, 4)
-for i, dc in enumerate(input_data.data_cols):
-   ah2.flat[i].cla()
-   ah2.flat[i].scatter(input_data.x[:,i], input_data.y, 2, input_data.x[:,0])
-   ah2.flat[i].set_title('{0}, l={1}'.format(dc, config['hyperparameters']['l'][i]))
+    fh2, ah2 = plt.subplots(3, 4)
+    for i, dc in enumerate(input_data.data_cols):
+       ah2.flat[i].cla()
+       ah2.flat[i].scatter(input_data.x[:,i], input_data.y, 2, input_data.x[:,0])
+       ah2.flat[i].set_title('{0}, l={1}'.format(dc, config['hyperparameters']['l'][i]))
 
 # Scale y to have minimum score 1
 input_data._scale_y()
-
-fh3, ah3 = plt.subplots()
 full_mat = np.concatenate((input_data.x, input_data.y), axis=1)
 C = np.corrcoef(full_mat, rowvar=False)
-hmat = ah3.matshow(np.abs(C))
+
+if make_plots:
+    fh3, ah3 = plt.subplots()
+    hmat = ah3.matshow(np.abs(C))
+    ah3.set_title('Input dimension correlation coefficient matrix')
 
 for R, var_name in zip(C[0:-1,-1], input_data.data_cols):
     print('{0}: R = {1:0.2f}'.format(var_name, R))
@@ -58,20 +77,11 @@ log_hyp = np.log(all_hyper)
 config['GP_params']['hyper_counts'] = [d_x+1, 1, 2]
 
 if optimise_hyper:
-    n_rel = 2
-
+    n_rel = args.n_rel
     x_rel, uvi_rel, y_rel, f_rel = input_data.random_relative_obs(n_rel)
 
-    # uvi_rel = np.array([[0, 1]])
-    # x_rel, y_rel, fuv_rel = input_data.get_relative_obs(uvi_rel)
-    # x_rel = wine_data[0:2*n_rel, 0:-1]
-    # fuv_rel = wine_data[0:2*n_rel, -1]
-    # y_rel = np.array([1])
-
-    n_abs = 300
+    n_abs = args.n_abs
     x_abs, y_abs = input_data.random_absolute_obs(n_abs)
-    # x_abs = wine_data[2*n_rel:(2*n_rel+n_abs), 0:-1]
-    # y_abs = np.expand_dims(input_data.data.values[2 * n_rel:(2 * n_rel + n_abs), -1] - 2, axis=1).astype(dtype='int')
 
     model_kwargs = {'x_rel': x_rel, 'uvi_rel': uvi_rel, 'x_abs': x_abs, 'y_rel': y_rel, 'y_abs': y_abs,
                     'rel_kwargs': config['rel_obs_params'], 'abs_kwargs': config['abs_obs_params']}
@@ -93,9 +103,10 @@ if optimise_hyper:
     config['hyperparameters']['sig_beta'] = learned_hyperparameters[-2]
     config['hyperparameters']['v_beta'] = learned_hyperparameters[-1]
 
-    config['wine_data']['variables'] = input_data.data_cols
+    config['wine_params']['variables'] = input_data.data_cols
 
     with open(out_yaml, 'w') as fh:
         yaml.safe_dump(config, fh)
 
-plt.show()
+if make_plots:
+    plt.show()

@@ -5,7 +5,7 @@ GP_params:
   hyper_counts: [12, 1, 2]           # Number of hypers for GP cov, rel likelihood, abs likelihood
 # Hyperparameters are: [[l, sig_f], sig_rel, sig_beta, v_beta]
 hyperparameters: 
-  l: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+  l: [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
   sig_f: 1.0
   sig_rel: 0.1
   sig_beta: 0.4

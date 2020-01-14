@@ -3,7 +3,7 @@ import time
 import numpy as np
 import yaml
 import argparse
-import GPpref
+from gp_tools import GPpref
 import active_learners
 import utils.plot_tools as ptt
 from utils import test_data
