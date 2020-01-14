@@ -50,6 +50,7 @@ class WineQualityData(object):
             self._norm_x()
 
         self.y = np.expand_dims(self.data[self.y_index].values, -1)
+        # self.y = self.data[self.y_index].values
         if self.scale_y:
             self._scale_y()
 
@@ -74,14 +75,18 @@ class WineQualityData(object):
         indexes = np.random.choice(self.data.shape[0], n, replace=False)
         return self.get_data(indexes)
 
-    def get_relative_obs(self, uvi):
+    def get_relative_obs(self, data_uv):
+        assert data_uv.shape[1] == 2, 'UV index must be n x 2'
         # No noise observation from data
-        x_rel, fuv_rel = self.get_data(uvi)
-        y_rel = np.array([1])
+        x_rel, f_rel = self.get_data(data_uv.flat)
 
-        y = -1 * np.ones((fuv_rel.shape[0], 1), dtype='int')
-        y[fuv_rel[:, 1] > fuv_rel[:, 0]] = 1
-        return x_rel, y_rel, fuv_rel
+        # Basically just does the indices in order (since we sampled from x)
+        # [[0,1],[2,3],[3,4], ...]
+        uvi_rel = np.arange(data_uv.shape[0]*2).reshape((data_uv.shape[0], 2))
+
+        y_rel = -1 * np.ones((data_uv.shape[0], 1), dtype='int')
+        y_rel[f_rel[uvi_rel[:, 1], 0] > f_rel[uvi_rel[:, 0], 0]] = 1
+        return x_rel, uvi_rel, y_rel, f_rel
         # x_rel = wine_data[0:2 * n_rel, 0:-1]
         # uvi_rel = np.array([[0, 1]])
         # fuv_rel = wine_data[0:2 * n_rel, -1]
@@ -89,5 +94,5 @@ class WineQualityData(object):
     def random_relative_obs(self, n=1):
         # Returns uvi_rel, x_rel, y_rel, fuv_rel
         indexes = np.random.choice(self.data.shape[0], (n,2), replace=False)
-        x_rel, y_rel, fuv_rel = self.get_relative_obs(indexes)
-        return indexes, x_rel, y_rel, fuv_rel
+        x_rel, uvi_rel, y_rel, fuv_rel = self.get_relative_obs(indexes)
+        return x_rel, uvi_rel, y_rel, fuv_rel

@@ -6,7 +6,7 @@ import scipy.optimize as op
 from utils.wine_data import WineQualityData
 
 
-optimise_hyper = False
+optimise_hyper = True
 R_limit = 0.1
 
 # Read config file
@@ -54,10 +54,16 @@ d_x = len(all_hyper)
 all_hyper = np.concatenate((all_hyper, [hyper['sig_f'], hyper['sig_rel'], hyper['sig_beta'], hyper['v_beta']]))
 log_hyp = np.log(all_hyper)
 
+# Reset hyper count
+config['GP_params']['hyper_counts'] = [d_x+1, 1, 2]
+
 if optimise_hyper:
-    n_rel = 1
-    uvi_rel = np.array([[0, 1]])
-    x_rel, y_rel, fuv_rel = input_data.get_relative_obs(uvi_rel)
+    n_rel = 2
+
+    x_rel, uvi_rel, y_rel, f_rel = input_data.random_relative_obs(n_rel)
+
+    # uvi_rel = np.array([[0, 1]])
+    # x_rel, y_rel, fuv_rel = input_data.get_relative_obs(uvi_rel)
     # x_rel = wine_data[0:2*n_rel, 0:-1]
     # fuv_rel = wine_data[0:2*n_rel, -1]
     # y_rel = np.array([1])
@@ -81,7 +87,6 @@ if optimise_hyper:
     learned_hyperparameters = np.exp(log_hyp_opt).tolist()
     print ('New hyper: {0}'.format(learned_hyperparameters))
 
-    config['GP_params']['hyper_counts'] = [d_x, 1, 2]
     config['hyperparameters']['l'] = learned_hyperparameters[0:-4]
     config['hyperparameters']['sig_f'] = learned_hyperparameters[-4]
     config['hyperparameters']['sig_rel'] = learned_hyperparameters[-3]
