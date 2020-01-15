@@ -493,7 +493,7 @@ class PreferenceGaussianProcess(object):
         # self.abs_likelihood.set_sigma(np.exp(loghyp[-2])) # I think this sigma relates to sigma_f in the covariance, and is actually possibly redundant
         # self.abs_likelihood.set_v(np.exp(loghyp[-1]))     # Should this relate to the rel_likelihood probit noise?
 
-    def calc_laplace(self, loghyp=None):
+    def calc_laplace(self, loghyp=None, maxloops=10000):
         if loghyp is not None:
             self.set_hyperparameters(loghyp)
 
@@ -557,7 +557,7 @@ class PreferenceGaussianProcess(object):
             # print "F New: " + str(f_new)
             f = f_new
             nloops += 1
-            if nloops > 10000:
+            if nloops > maxloops:
                 raise LaplaceException("Maximum loops exceeded in calc_laplace!!")
             if self.verbose > 1:
                 lml = py - 0.5*np.matmul(f.T, np.matmul(self.iK, f)) - 0.5*np.log(np.linalg.det(np.matmul(W, self.Kxx) + self.Ix))
