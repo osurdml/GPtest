@@ -5,13 +5,9 @@ from utils.data_downloader import MrDataGrabber
 
 
 class WineQualityData(object):
-    data_cols = None
-    x = None
-    y = None
 
     def __init__(self, wine_type='red', file_loc='data/wine_quality/',
-                 cols='all', y_index='quality', norm=False, scale_y = True):
-
+                 cols='all', y_index='quality', norm=False, scale_y=True):
         self.type = wine_type
         self.y_index = y_index
         self.norm = norm
@@ -37,13 +33,6 @@ class WineQualityData(object):
         # Setup data handlers
         self._reset_cols(cols)
 
-        # Label probabilities
-        self.p_y_true = np.zeros((self.x.shape[0], self.y.max()), dtype=float)
-        for py, y in zip(self.p_y_true, self.y):
-            py[y-1] = 1.0
-
-    # Probability of labels (for us, one hot)
-
     def _reset_cols(self, cols='all'):
         if cols == 'all':
             self.data_cols = list(self.data.keys())
@@ -61,6 +50,12 @@ class WineQualityData(object):
         if self.scale_y:
             self._scale_y()
 
+        # Probability of labels (for us, one hot)
+        self.p_y_true = np.zeros((self.x.shape[0], self.y.max()),
+                                 dtype=float)
+        for py, y in zip(self.p_y_true, self.y):
+            py[y - 1] = 1.0
+
     def _norm_x(self):
         self.norm = True
         self.x = (self.x - self.x.min(axis=0)) / (self.x.max(axis=0) - self.x.min(axis=0))
@@ -69,6 +64,10 @@ class WineQualityData(object):
         # Rescale y to integer ratings, with 1 minimum
         self.scale_y = True
         self.y = self.y + 1 - self.y.min()
+
+    def shuffle(self):
+        self.data = self.data.sample(frac=1).reset_index(drop=True)
+        self._reset_cols(self.data_cols)
 
     def get_data(self, entries=None):
         # Get specified (X, y) pair from data

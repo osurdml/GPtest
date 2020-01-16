@@ -35,7 +35,7 @@ def rel_error(y_true, prel_true, y_est, prel_est, weight=False):
 
 
 def renorm_p(p, axis=0, min_p=1e-10):
-    p = max(p,0) + min_p
+    p = np.maximum(p,0) + min_p
     p = p/p.sum(axis=axis)
     return p
 
