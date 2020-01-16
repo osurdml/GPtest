@@ -17,6 +17,7 @@ def wrms_misclass(y_true, y_est, w_power=2):
     w = np.power(np.maximum(y_true, y_est), w_power)
     return np.sqrt(np.mean(((y_true - y_est)*w)**2))
 
+
 def rel_error(y_true, prel_true, y_est, prel_est, weight=False):
     if weight:
         y_max = np.maximum(y_true.flatten(), y_est.flatten())
@@ -32,10 +33,18 @@ def rel_error(y_true, prel_true, y_est, prel_est, weight=False):
             mean_p_err += w*np.abs(prel_true[i,j] - prel_est[i,j])
     return mean_p_err/w_sum
 
-def ordinal_kld(p_y_true, p_y_est, w = np.array([1.0])):
+
+def renorm_p(p, axis=0, min_p=1e-10):
+    p = max(p,0) + min_p
+    p = p/p.sum(axis=axis)
+    return p
+
+
+def ordinal_kld(p_y_true, p_y_est, w=np.array([1.0])):
     kld = -(p_y_true * np.log(p_y_est/p_y_true)).sum(axis=0)
     wkld = w*kld/w.mean()
     return wkld.mean()
+
 
 class ObsObject(object):
     def __init__(self, x_rel, uvi_rel, x_abs, y_rel, y_abs):

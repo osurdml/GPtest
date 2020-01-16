@@ -37,6 +37,13 @@ class WineQualityData(object):
         # Setup data handlers
         self._reset_cols(cols)
 
+        # Label probabilities
+        self.p_y_true = np.zeros((self.x.shape[0], self.y.max()), dtype=float)
+        for py, y in zip(self.p_y_true, self.y):
+            py[y-1] = 1.0
+
+    # Probability of labels (for us, one hot)
+
     def _reset_cols(self, cols='all'):
         if cols == 'all':
             self.data_cols = list(self.data.keys())
