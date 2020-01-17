@@ -658,18 +658,23 @@ class PreferenceGaussianProcess(object):
 
 
 class ObservationSampler(object):
-    def __init__(self, true_fun, likelihood_type, likelihood_kwargs):
+    def __init__(self, true_fun, likelihood_type, likelihood_kwargs, *extra_args, **extra_kwargs):
         self.f = true_fun
         ltype = getattr(sys.modules[__name__], likelihood_type)
         self.l = ltype(**likelihood_kwargs)
+        self._extra_init(**extra_args)
+
+    def _extra_init(self, *extra_args, **extra_kwargs):
+        # This can be overwritten by derived classes for extra init options
+        # (Is this abusing this system???)
+        pass
 
     def generate_observations(self, x):
         fx = self.f(x)
         y, ff = self.l.generate_samples(fx)
         return y, ff
 
-    @staticmethod
-    def _gen_x_obs(n, n_xdim=1, domain=None):
+    def _gen_x_obs(self, n, n_xdim=1, domain=None):
         # Domain should be 2 x n_xdim, i.e [[x0_lo, x1_lo, ... , xn_lo], [x0_hi, x1_hi, ... , xn_hi ]]
         x_test = np.random.uniform(size=(n, n_xdim))
         if domain is not None:

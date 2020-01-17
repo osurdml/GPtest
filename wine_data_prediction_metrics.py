@@ -27,7 +27,6 @@ wine_type = config['wine_params']['type']
 
 # Get wine data:
 input_data = WineQualityData(wine_type=wine_type, cols=config['wine_params']['variables'], norm=config['wine_params']['normalise_data'], scale_y=True)
-print('Loaded {0} wine data. Contains {1} samples, {2} input dimensions loaded'.format(wine_type, input_data.x.shape[0], input_data.x.shape[1]))
 # Shuffle the data
 if args.shuffle:
     input_data.shuffle()

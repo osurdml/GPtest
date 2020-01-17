@@ -2,7 +2,7 @@ import pandas
 import os
 import numpy as np
 from utils.data_downloader import MrDataGrabber
-
+from gp_tools.GPpref import AbsObservationSampler, RelObservationSampler
 
 class WineQualityData(object):
 
@@ -33,6 +33,10 @@ class WineQualityData(object):
         # Setup data handlers
         self._reset_cols(cols)
 
+        print('Loaded {0} wine data. Contains {1} samples, {2} ' +
+              'input dimensions.'.format(wine_type, self.x.shape[0],
+                                               self.x.shape[1]))
+
     def _reset_cols(self, cols='all'):
         if cols == 'all':
             self.data_cols = list(self.data.keys())
@@ -40,6 +44,9 @@ class WineQualityData(object):
         else:
             self.data_cols = cols
 
+        self._reset()
+
+    def _reset(self):
         # Data views
         self.x = self.data[self.data_cols].values
         if self.norm:
@@ -56,6 +63,8 @@ class WineQualityData(object):
         for py, y in zip(self.p_y_true, self.y):
             py[y - 1] = 1.0
 
+        self.available_indexes = range(self.x.shape[0])
+
     def _norm_x(self):
         self.norm = True
         self.x = (self.x - self.x.min(axis=0)) / (self.x.max(axis=0) - self.x.min(axis=0))
@@ -67,7 +76,7 @@ class WineQualityData(object):
 
     def shuffle(self):
         self.data = self.data.sample(frac=1).reset_index(drop=True)
-        self._reset_cols(self.data_cols)
+        self._reset()
 
     def get_data(self, entries=None):
         # Get specified (X, y) pair from data
@@ -102,3 +111,15 @@ class WineQualityData(object):
         indexes = np.random.choice(self.data.shape[0], (n,2), replace=False)
         x_rel, uvi_rel, y_rel, fuv_rel = self.get_relative_obs(indexes)
         return x_rel, uvi_rel, y_rel, fuv_rel
+
+
+class WineAbsObsSampler(AbsObservationSampler):
+
+    def _extra_init(self, wine_data_object):
+        # This gives us access to the list of indexes of data that has
+        # not yet been used, and is therefore available for selecting new
+        # samples from.
+        self.wine_data_object = wine_data_object
+
+    def _gen_x_obs(self, n, n_xdim=1, domain=None):
+        assert n <= len(self.wine_data_object.available_indexes)
