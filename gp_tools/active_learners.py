@@ -30,10 +30,12 @@ class Learner(object):
         return self.model.select_observation(**self.obs_arguments)
 
 class ActiveLearner(GPpref.PreferenceGaussianProcess):
-    def init_extras(self):
-        self._default_uvi = np.array([[0, 1]])
-        self._plus_y_obs = np.ones((1, 1), dtype='int')
-        self._minus_y_obs = -1*self._plus_y_obs
+    def _init_extras(self, default_uvi=np.array([[0, 1]]),
+                    plus_y_obs=np.ones((1, 1), dtype='int'),
+                    minus_y_obs=-1*np.ones((1, 1), dtype='int')):
+        self._default_uvi = default_uvi
+        self._plus_y_obs = plus_y_obs
+        self._minus_y_obs = minus_y_obs
 
     def solve_laplace(self, log_hyp=None):
         self.f = self.calc_laplace(log_hyp)

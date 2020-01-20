@@ -112,6 +112,13 @@ class WineQualityData(object):
         x_rel, uvi_rel, y_rel, fuv_rel = self.get_relative_obs(indexes)
         return x_rel, uvi_rel, y_rel, fuv_rel
 
+    def pop_observations(self, indexes):
+        # This will return an observation and remove it from the list of
+        # available observations
+        for i in indexes:
+            self.available_indexes.remove(i)
+        return self.get_data(indexes)
+
 
 class WineAbsObsSampler(AbsObservationSampler):
 

@@ -409,7 +409,7 @@ class AbsBoundProbit(object):
 class PreferenceGaussianProcess(object):
 
     def __init__(self, x_rel, uvi_rel, x_abs, y_rel, y_abs, rel_likelihood='PrefProbit', delta_f=1.0e-5,
-                 abs_likelihood='AbsBoundProbit', verbose=0, hyper_counts=[2, 1, 2], rel_kwargs={}, abs_kwargs={}):
+                 abs_likelihood='AbsBoundProbit', verbose=0, hyper_counts=[2, 1, 2], rel_kwargs={}, abs_kwargs={}, *args, **kwargs):
         # hyperparameters are split by hyper_counts, where hyper_counts should contain three integers > 0, the first is
         # the number of hypers in the GP covariance, second is the number in the relative likelihood, last is the number
         # in the absolute likelihood. hyper_counts.sum() should be equal to len(log_hyp)
@@ -432,9 +432,9 @@ class PreferenceGaussianProcess(object):
         self.f = None
 
         self.hyper_counts = np.array(hyper_counts)
-        self.init_extras()
+        self._init_extras(*args, **kwargs)
 
-    def init_extras(self):
+    def _init_extras(self):
         pass
 
     def set_observations(self, x_rel, uvi_rel, x_abs, y_rel, y_abs):
