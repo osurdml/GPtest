@@ -29,12 +29,13 @@ class WineQualityData(object):
 
         # Read data file
         self.data = pandas.read_csv(self.file, delimiter=';')
+        self.data.drop_duplicates(inplace=True)
 
         # Setup data handlers
         self._reset_cols(cols)
 
-        print('Loaded {0} wine data. Contains {1} samples, {2} ' +
-              'input dimensions.'.format(wine_type, self.x.shape[0],
+        print(('Loaded {0} wine data. Contains {1} samples, {2} ' +
+              'input dimensions.').format(wine_type, self.x.shape[0],
                                                self.x.shape[1]))
 
     def _reset_cols(self, cols='all'):
@@ -63,7 +64,7 @@ class WineQualityData(object):
         for py, y in zip(self.p_y_true, self.y):
             py[y - 1] = 1.0
 
-        self.available_indexes = range(self.x.shape[0])
+        # self.available_indexes = range(self.x.shape[0])
 
     def _norm_x(self):
         self.norm = True
@@ -76,6 +77,7 @@ class WineQualityData(object):
 
     def shuffle(self):
         self.data = self.data.sample(frac=1).reset_index(drop=True)
+        print('Wine data shuffled!')
         self._reset()
 
     def get_data(self, entries=None):
@@ -87,6 +89,7 @@ class WineQualityData(object):
 
     def random_absolute_obs(self, n=1):
         # Sample random entries
+        assert n <= self.data.shape[0]
         indexes = np.random.choice(self.data.shape[0], n, replace=False)
         return self.get_data(indexes)
 
@@ -112,21 +115,72 @@ class WineQualityData(object):
         x_rel, uvi_rel, y_rel, fuv_rel = self.get_relative_obs(indexes)
         return x_rel, uvi_rel, y_rel, fuv_rel
 
-    def pop_observations(self, indexes):
-        # This will return an observation and remove it from the list of
-        # available observations
-        for i in indexes:
-            self.available_indexes.remove(i)
-        return self.get_data(indexes)
+    def get_rating(self, x):
+        i = np.where(self.x == x)
+        return self.y[i]
 
 
-class WineAbsObsSampler(AbsObservationSampler):
+class WineObsSampler(object):
 
-    def _extra_init(self, wine_data_object):
+    available_indexes = None
+
+    def __init__(self, wine_data_object):
         # This gives us access to the list of indexes of data that has
         # not yet been used, and is therefore available for selecting new
         # samples from.
         self.wine_data_object = wine_data_object
+        self.reset()
+        # Overwrite the observe function
+        self.f = self.wine_data_object.get_rating
+
+
+    def generate_observations(self, x):
+        fx = self.f(x)
+        return fx, fx
 
     def _gen_x_obs(self, n, n_xdim=1, domain=None):
-        assert n <= len(self.wine_data_object.available_indexes)
+        # Get random samples from set of available samples
+        assert n <= len(self._available_indexes)
+        indexes = self.get_available_indexes(n)
+        return self.wine_data_object.x[indexes]
+
+    def reset(self):
+        self._available_indexes = range(self.wine_data_object.x.shape[0])
+
+    def remove_indexes(self, indexes):
+        for i in indexes:
+            if i in self._available_indexes:
+                self._available_indexes.remove(i)
+
+    def pop_abs_observations(self, indexes):
+        # This will return an observation and remove it from the list of
+        # available observations
+        self.remove_indexes(indexes)
+        return self.wine_data_object.get_data(indexes)
+
+    def pop_rel_observations(self, indexes):
+        # This will return an observation and remove it from the list of
+        # available observations
+        self.remove_indexes(indexes.flatten())
+        return self.wine_data_object.get_relative_obs(indexes)
+
+    def make_rel_observations(self, indexes):
+        # We assume the input is a list of observations to compare
+        # This will return an observation and remove all from the list of
+        # available observations
+
+        # No noise observation from data
+        self.remove_indexes(indexes)
+        x_rel, f_rel = self.wine_data_object.get_data(indexes)
+        best_index = np.argmax(f_rel)
+        others = range(0, best_index) + range(best_index+1, len(indexes))
+        uvi_rel = np.array([[best_index, i] for i in others])
+
+        y_rel = -1 * np.ones((uvi_rel.shape[0], 1), dtype='int')
+        return x_rel, uvi_rel, y_rel, f_rel
+
+    def get_available_indexes(self, n=None):
+        if n is None:
+            return self._available_indexes
+        else:
+            return np.random.choice(self._available_indexes, n, replace=False)

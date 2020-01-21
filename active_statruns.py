@@ -4,7 +4,7 @@ import numpy as np
 import yaml
 import argparse
 from gp_tools import GPpref
-import active_learners
+from gp_tools import active_learners
 import utils.plot_tools as ptt
 from utils import test_data
 from utils import plot_statruns

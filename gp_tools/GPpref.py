@@ -662,7 +662,7 @@ class ObservationSampler(object):
         self.f = true_fun
         ltype = getattr(sys.modules[__name__], likelihood_type)
         self.l = ltype(**likelihood_kwargs)
-        self._extra_init(**extra_args)
+        self._extra_init(*extra_args, **extra_kwargs)
 
     def _extra_init(self, *extra_args, **extra_kwargs):
         # This can be overwritten by derived classes for extra init options

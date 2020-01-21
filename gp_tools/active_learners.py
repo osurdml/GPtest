@@ -32,10 +32,14 @@ class Learner(object):
 class ActiveLearner(GPpref.PreferenceGaussianProcess):
     def _init_extras(self, default_uvi=np.array([[0, 1]]),
                     plus_y_obs=np.ones((1, 1), dtype='int'),
-                    minus_y_obs=-1*np.ones((1, 1), dtype='int')):
+                    minus_y_obs=-1*np.ones((1, 1), dtype='int'), domain_sampler=None):
         self._default_uvi = default_uvi
         self._plus_y_obs = plus_y_obs
         self._minus_y_obs = minus_y_obs
+        if domain_sampler is None:
+            self.domain_sampler = self.uniform_domain_sampler
+        else:
+            self.domain_sampler = domain_sampler
 
     def solve_laplace(self, log_hyp=None):
         self.f = self.calc_laplace(log_hyp)
@@ -47,7 +51,7 @@ class ActiveLearner(GPpref.PreferenceGaussianProcess):
     def select_observation(self, p_rel=0.5, domain=None, n_rel_samples=2):
         if np.random.uniform() > p_rel: # i.e choose an absolute sample
             n_rel_samples = 1
-        return self.uniform_domain_sampler(n_rel_samples, domain)
+        return self.domain_sampler(n_rel_samples, domain)
 
     def uniform_domain_sampler(self, n_samples, domain=None, sortx=False):
         # Domain should be 2 x n_xdim, i.e [[x0_lo, x1_lo, ... , xn_lo], [x0_hi, x1_hi, ... , xn_hi ]]
@@ -130,7 +134,7 @@ class MaxVar(ActiveLearner):
             p_select = 1.0
         else:
             p_select = p_rel
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         vv = np.sqrt(np.diagonal(vhat))
 
@@ -168,7 +172,7 @@ class MaxVar(ActiveLearner):
 class UCBLatent(ActiveLearner):
     # All absolute returns
     def select_observation(self, domain=None, n_test=100, gamma=2.0):
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         ucb = calc_ucb(fhat, vhat, gamma)
         return x_test[[np.argmax(ucb)], :]
@@ -177,7 +181,7 @@ class UCBLatent(ActiveLearner):
 class UCBLatentSoftmax(ActiveLearner):
     # All absolute returns
     def select_observation(self, domain=None, n_test=100, gamma=2.0, tau=1.0):
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         ucb = calc_ucb(fhat, vhat, gamma)
         return x_test[[softmax_selector(ucb, tau)], :]
@@ -185,7 +189,7 @@ class UCBLatentSoftmax(ActiveLearner):
 class UCBCovarianceSoftmax(ActiveLearner):
     # All absolute returns
     def select_observation(self, domain=None, n_test=100, gamma=2.0, tau=1.0):
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         ucb = fhat.flatten() + gamma * (vhat.sum(axis=1) ** 0.25)
         return x_test[[softmax_selector(ucb, tau)], :]
@@ -194,7 +198,7 @@ class UCBOut(ActiveLearner):
     # NOT FULLY IMPLEMENTED - BROKEN
     def select_observation(self, domain=None, n_test=100, gamma=2.0):
         # Don't know how to recover the second moment of the predictive distribution, so this isn't done
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         Ey = self.expected_y(x_test, fhat, vhat)
         return x_test[[np.argmax(Ey)], :]
@@ -202,7 +206,7 @@ class UCBOut(ActiveLearner):
 
 class ProbabilityImprovementAbs(ActiveLearner):
     def mean_var_sampler(self, n_test, domain):
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         shat = np.atleast_2d(np.sqrt(vhat.diagonal())).T
         return x_test, fhat, shat
@@ -258,14 +262,14 @@ class ExpectedImprovementRel(ExpectedImprovementAbs):
 #     # All absolute returns
 #     def select_observation(self, domain=None, n_test=100):
 #
-#         x_test = self.uniform_domain_sampler(n_test, domain)
+#         x_test = self.domain_sampler(n_test, domain)
 #         fhat, vhat = self.predict_latent(x_test)
 #         ucb = calc_ucb(fhat, vhat, gamma)
 #         return x_test[[softmax_selector(ucb, tau)], :]
 
 class ABSThresh(ActiveLearner):
     def select_observation(self, domain=None, n_test=100, p_thresh=0.7):
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         aa, bb = self.abs_likelihood.get_alpha_beta(fhat)
         p_under_thresh = beta.cdf(p_thresh, aa, bb)
@@ -275,7 +279,7 @@ class ABSThresh(ActiveLearner):
 
 class UCBAbsRel(ActiveLearner):
     def select_observation(self, domain=None, n_test=100, p_rel=0.5, n_rel_samples=2, gamma=2.0, tau=1.0):
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         ucb = calc_ucb(fhat, vhat, gamma)
 
@@ -297,7 +301,7 @@ class UCBAbsRel(ActiveLearner):
 
 class UCBAbsRelD(ActiveLearner):
     def select_observation(self, domain=None, n_test=100, p_rel=0.5, n_rel_samples=2, gamma=2.0, tau=1.0):
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         ucb = calc_ucb(fhat, vhat, gamma)
 
@@ -317,7 +321,7 @@ class UCBAbsRelD(ActiveLearner):
 
 class DetRelBoo(ActiveLearner):
     def select_observation(self, domain=None, n_test=100, n_rel_samples=2, gamma=2.0, tau=1.0):
-        x_test = self.uniform_domain_sampler(n_test, domain, sortx=True)
+        x_test = self.domain_sampler(n_test, domain, sortx=True)
         fhat, vhat = self.predict_latent(x_test)
         # ucb = calc_ucb(fhat, vhat, gamma)
 
@@ -346,7 +350,7 @@ class DetRelBoo(ActiveLearner):
 
 class DetSelect(ActiveLearner):
     def select_observation(self, domain=None, n_test=100, n_rel_samples=2, gamma=2.0, rel_tau=1.0, abs_tau=1.0):
-        x_test = self.uniform_domain_sampler(n_test, domain, sortx=True)
+        x_test = self.domain_sampler(n_test, domain, sortx=True)
         fhat, vhat = self.predict_latent(x_test)
         # ucb = calc_ucb(fhat, vhat, gamma).flatten()
 
@@ -409,7 +413,7 @@ class PeakComparitor(ActiveLearner):
 
     def select_observation(self, domain=None, n_test=50, gamma=2.0, n_rel_samples=2):
         n_comparators = n_rel_samples-1
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         ucb = calc_ucb(fhat, vhat, gamma)
         max_xi = np.argmax(ucb)  # Old method used highest x, not ucb
@@ -455,7 +459,7 @@ class LikelihoodImprovement(PeakComparitor):
 
     def select_observation(self, domain=None, n_test=50, req_improvement=0.6, n_rel_samples=2, gamma=1.5, p_thresh=0.7):
         n_comparators = n_rel_samples-1
-        x_test = self.uniform_domain_sampler(n_test, domain)
+        x_test = self.domain_sampler(n_test, domain)
         fhat, vhat = self.predict_latent(x_test)
         max_xi = np.argmax(fhat)
         other_xi = np.delete(np.arange(n_test), max_xi)
@@ -530,7 +534,7 @@ class SampledThreshold(PeakComparitor):
         # Generate a set of test points in the domain (if not specified)
         if x_test is None:
             # x_test = self.linear_domain_sampler(n_test, domain)
-            x_test = self.uniform_domain_sampler(n_test, domain)
+            x_test = self.domain_sampler(n_test, domain)
             # x_test.sort(axis=0)
         n_test = len(x_test)
 
@@ -657,7 +661,7 @@ class OrdinalSampler(PeakComparitor):
         # Generate a set of test points in the domain (if not specified)
         if x_test is None:
             # x_test = self.linear_domain_sampler(n_test, domain)
-            x_test = self.uniform_domain_sampler(n_test, domain)
+            x_test = self.domain_sampler(n_test, domain)
         n_test = len(x_test)
 
         # We save the f value because otherwise it gets out of whack when we add observations
