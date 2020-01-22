@@ -7,13 +7,13 @@ GP_params:
 hyperparameters: 
   l: [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
   sig_f: 1.0
-  sig_rel: 0.1
+  sig_rel: 1.0
   sig_beta: 0.4
   v_beta: 1.2
 abs_obs_params: {sigma: 0.4, b: 1.2, n_ordinals: 6} # Ordinal logistic parameters
 rel_obs_params: {sigma: 0.1}                        # Relative logistic parameters
 wine_params:
-  type: 'red'
+  type: 'white'
   variables: 'all'
   normalise_data: True
 statrun_params:

@@ -20,9 +20,9 @@ yaml_config ='./config/red_statruns.yaml'
 parser = argparse.ArgumentParser(description='Statruns for active learning with preference GP - wine data')
 parser.add_argument('-np', '--no-plots', dest='make_plots', action='store_false', help='Turn off plots (default False)')
 parser.add_argument('-y', '--yaml-config', default=yaml_config, help='YAML config file')
-parser.add_argument('-na', '--n-abs', default=50, type=int, help='Number of prior absolute training points')
-parser.add_argument('-nr', '--n-rel', default=10, type=int, help='Number of prior relative training points')
+parser.add_argument('-rs', '--random-seed', default=None, type=int, help='Random seed')
 parser.add_argument('-ml', '--min-label', default=5, type=int, help='Minimum label value to count as good point')
+
 
 args = parser.parse_args()
 
@@ -31,6 +31,8 @@ if not args.make_plots:
     print "No plot output."
 with open(args.yaml_config, 'rt') as fh:
     config = yaml.safe_load(fh)
+
+np.random.seed(seed=args.random_seed)
 
 hyper = config['hyperparameters']
 d_x = len(hyper['l'])
