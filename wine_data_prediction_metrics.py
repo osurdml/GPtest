@@ -37,10 +37,6 @@ d_x = len(hyper['l'])
 all_hyper = np.concatenate((hyper['l'], [hyper['sig_f'], hyper['sig_rel'], hyper['sig_beta'], hyper['v_beta']]))
 log_hyp = np.log(all_hyper)
 
-# Reset hyper count
-config['GP_params']['hyper_counts'] = [d_x+1, 1, 2]
-
-
 # We just get the first entries (data is not sorted)
 n_rel = args.n_rel
 uv_first = np.arange(2*n_rel, dtype=int).reshape((n_rel,2))

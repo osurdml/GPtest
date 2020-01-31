@@ -512,6 +512,10 @@ class PreferenceGaussianProcess(object):
         nloops = 0
 
         while f_error > self.delta_f:
+            if np.isnan(f).any():
+                print("NaN error in Laplace, restarting with noisy f")
+                f = np.zeros((self._nx, 1), dtype='float') + np.random.normal(0, self.delta_f*1e3, f_new.size)
+
             # Is splitting these apart correct?  Will there be off-diagonal elements of W_abs that should be 
             # non-zero because of the relative training points?
             f_rel = f[0:self._n_rel]
@@ -551,6 +555,9 @@ class PreferenceGaussianProcess(object):
             # lml = 0.0
 
             df = np.abs((f_new - f))
+            if nloops > 0 and df.max() > f_error:
+                print("Laplace error increase, adding noise")
+                f_new = f_new + np.random.normal(0, df.max()/10.0, f_new.size)
             f_error = np.max(df)
 
             # print "F Error: " + str(f_error) #,lml
@@ -561,7 +568,7 @@ class PreferenceGaussianProcess(object):
                 raise LaplaceException("Maximum loops exceeded in calc_laplace!!")
             if self.verbose > 1:
                 lml = py - 0.5*np.matmul(f.T, np.matmul(self.iK, f)) - 0.5*np.log(np.linalg.det(np.matmul(W, self.Kxx) + self.Ix))
-                print "Laplace iteration {0:02d}, log p(y|f) = {1:0.2f}".format(nloops, lml[0,0])
+                print("Laplace iteration {0:02d}, log p(y|f) = {1:0.2f}".format(nloops, lml[0,0]))
 
         self.W = W
         self.f = f

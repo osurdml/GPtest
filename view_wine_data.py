@@ -75,7 +75,7 @@ log_hyp = np.log(all_hyper)
 
 # Reset hyper count
 config['GP_params']['hyper_counts'] = [d_x+1, 1, 2]
-config['abs_obs_params']['n_ordinals'] = input_data.y.max()
+config['abs_obs_params']['n_ordinals'] = int(input_data.y.max())
 
 if optimise_hyper:
     n_rel = args.n_rel

@@ -29,7 +29,7 @@ class WineQualityData(object):
 
         # Read data file
         self.data = pandas.read_csv(self.file, delimiter=';')
-        self.data.drop_duplicates(inplace=True)
+        self.data.drop_duplicates(subset=self._get_cols(cols), inplace=True)
 
         # Setup data handlers
         self._reset_cols(cols)
@@ -38,13 +38,16 @@ class WineQualityData(object):
               'input dimensions.').format(wine_type, self.x.shape[0],
                                                self.x.shape[1]))
 
-    def _reset_cols(self, cols='all'):
+    def _get_cols(self, cols):
         if cols == 'all':
-            self.data_cols = list(self.data.keys())
-            self.data_cols.remove(self.y_index)
+            out_cols = list(self.data.keys())
+            out_cols.remove(self.y_index)
         else:
-            self.data_cols = cols
+            out_cols = cols
+        return out_cols
 
+    def _reset_cols(self, cols='all'):
+        self.data_cols = self._get_cols(cols)
         self._reset()
 
     def _reset(self):
