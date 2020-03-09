@@ -80,7 +80,7 @@ class WineQualityData(object):
 
     def shuffle(self):
         self.data = self.data.sample(frac=1).reset_index(drop=True)
-        print('Wine data shuffled!')
+        # print('Wine data shuffled!')
         self._reset()
 
     def get_data(self, entries=None):

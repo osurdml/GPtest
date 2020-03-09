@@ -6,6 +6,7 @@ from gp_tools import GPpref
 from utils import test_data
 import scipy.optimize as op
 from utils.wine_data import WineQualityData
+from tqdm import trange
 
 parser = argparse.ArgumentParser(description='Wine data metrics')
 parser.add_argument('-np', '--no-plots', dest='make_plots', action='store_false', help='Turn off plots (default False)')
@@ -52,7 +53,7 @@ wrms = np.zeros((args.repeat_shuffles, n_jumps), dtype=float)
 kld = wrms.copy()
 data_proportion = np.zeros(n_jumps, dtype=float)
 
-for i in range(args.repeat_shuffles):
+for i in trange(args.repeat_shuffles, desc='Shuffle repeat iteration'):
 
     # Shuffle the data
     if shuffle:
@@ -75,10 +76,7 @@ for i in range(args.repeat_shuffles):
     # Each step we add jump_val
     new_obs_index = np.arange(jump_val) + abs_first[-1]+1
 
-    j = 0
-
-    while new_obs_index[-1] < input_data.x.shape[0]:
-    # for i in range(2*n_rel + n_abs, input_data.x.shape[0]-50, jump_val):
+    for j in trange(n_jumps, desc='Data proportion'):
 
         next_x, next_y = input_data.get_data(new_obs_index)
         prefGP.add_observations(next_x, next_y)
@@ -98,10 +96,7 @@ for i in range(args.repeat_shuffles):
         kld[i, j] = test_data.ordinal_kld(p_y_true[:,test_index], p_y_est, np.maximum(input_data.y[test_index], est_y))
 
         data_proportion[j] = float(new_obs_index[-1])/input_data.x.shape[0]
-        print('Proportion: {0}%'.format(data_proportion[j]*100.0))
-
         new_obs_index = np.arange(jump_val) + new_obs_index[-1]+1
-        j = j+1
 
 if make_plots:
     fh, ah = plt.subplots(1, 2)
@@ -111,13 +106,13 @@ if make_plots:
     ah[1].set_ylabel('KL-Divergence (one-hot vs $p(y|X)$)')
 
     if wrms.shape[0] > 1:
-        ah[0].plot(data_proportion*100.0, wrms[0])
-        ah[1].plot(data_proportion*100.0, kld[0])
-        # fh.savefig('fig/red_wine_losses.pdf', bbox_inches='tight')
-
-    else:
         ah[0].violinplot(wrms, positions=data_proportion*100.0, showmedians=True, showmeans=False)
         ah[1].violinplot(kld, positions=data_proportion * 100.0,
                          showmedians=True, showmeans=False)
 
-plt.show()
+    else:
+        ah[0].plot(data_proportion * 100.0, wrms[0])
+        ah[1].plot(data_proportion * 100.0, kld[0])
+
+    # fh.savefig('fig/red_wine_losses.pdf', bbox_inches='tight')
+    plt.show()
