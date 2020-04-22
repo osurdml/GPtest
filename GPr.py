@@ -43,23 +43,23 @@ class GaussianProcess(object):
         
     # Define GP prediction function
     def compute_prediction(self,testInput):
-        Kxz = self.covFun.compute_Kxz_matrix(testInput)
-        Kxx = self.covFun.compute_Kxx_matrix()
-        iKxx = np.linalg.inv(Kxx)
+        Kxx = self.covFun.compute_K_matrix()
+        Kxz = self.covFun.compute_K_matrix(X1=testInput)
+        Kzz = self.covFun.compute_K_matrix(testInput, testInput)
+        iKxx = np.linalg.inv(Kxx + self.covFun.sn2*np.eye(Kxx.shape[0]))
         Kzx = Kxz.T
-        K_diag = np.diagonal(np.dot(np.dot(Kzx,iKxx),Kxz))
-        K_noise = self.covFun.sf2*np.ones(np.size(testInput,axis=0))
-        fz = np.dot(np.dot(Kzx,iKxx),self.trainTarget.T)
-        cov_fz = K_noise - K_diag
+        K_diag = np.dot(np.dot(Kzx,iKxx),Kxz)
+        fz = np.dot(np.dot(Kzx,iKxx), self.trainTarget)
+        cov_fz = Kzz - K_diag
         return fz, cov_fz
 	
     # Define GP negative log marginal likelihood function
-    def compute_likelihood(self,hyp):
+    def compute_likelihood(self, hyp):
         n = np.size(self.trainInput,axis=0)
-        covSE = SquaredExponential(hyp,self.trainInput)
-        Kxx = covSE.compute_Kxx_matrix()
+        covSE = SquaredExponential(hyp, self.trainInput)
+        Kxx = covSE.compute_K_matrix()
         m = self.meanFun.y
-        L = np.linalg.cholesky(Kxx)
+        L = np.linalg.cholesky(Kxx +self.covFun.sn2*np.eye(Kxx.shape[0]))
         iKxx = np.linalg.solve(L.T,np.linalg.solve(L,np.eye(n)))
         y = np.reshape(self.trainTarget,(len(self.trainTarget),1))
         err_y = np.dot(np.dot((y-m).T,iKxx),(y-m))/2
@@ -93,18 +93,16 @@ class SquaredExponential(CovarianceFunction):
         self.hyp = np.exp(self.logHyp)	# hyperparameters
         n = len(self.hyp)
         self.M = self.hyp[:n-2]        	# length scales
-        self.sf2 = self.hyp[n-2]**2        # squared exponential variance
+        self.sf2 = self.hyp[n-2]**2        # sigma_f variance
         self.sn2 = self.hyp[n-1]**2        # noise variance
-	
-    def compute_Kxx_matrix(self):
-        scaledX = self.x/self.M
-        sqDist = squared_distance(scaledX,scaledX)
-        Kxx = self.sn2*np.eye(np.size(self.x,axis=0))+self.sf2*np.exp(-0.5*sqDist)
-        return Kxx
-	
-    def compute_Kxz_matrix(self,z):
-        scaledX = self.x/self.M
-        scaledZ = z/self.M
+
+    def compute_K_matrix(self, X0=None, X1=None):
+        if X0 is None:
+            X0 = self.x
+        if X1 is None:
+            X1 = self.x
+        scaledX = X0/self.M
+        scaledZ = X1/self.M
         sqDist = squared_distance(scaledX,scaledZ)
-        Kxz = self.sf2*np.exp(-0.5*sqDist)
-        return Kxz
+        K = self.sf2*np.exp(-0.5*sqDist)
+        return K
