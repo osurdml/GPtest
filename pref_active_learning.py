@@ -4,9 +4,8 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from gp_tools import GPpref
+from gp_tools import GPpref, active_learners
 import utils.plot_tools as ptt
-import active_learners
 from utils import test_data
 import yaml
 from matplotlib.backends.backend_pdf import PdfPages
