@@ -9,16 +9,25 @@ import utils.plot_tools as ptt
 from utils import test_data
 import yaml
 from matplotlib.backends.backend_pdf import PdfPages
+import argparse
 
 nowstr = time.strftime("%Y_%m_%d-%H_%M")
 plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
-save_plots = True
-plot_type = 'video_frames'  # 'pdf'
-inter_frames = 30
+parser = argparse.ArgumentParser(description='Statruns for active learning with preference GP - wine data')
+parser.add_argument('-s', '--save-plots', dest='save_plots', action='store_true', help='Save output plots')
+parser.add_argument('-y', '--yaml-config', default='./data/shortrun_2D.yaml', help='YAML config file')
+parser.add_argument('-if', '--inter-frames', default=20, type=int, help='Intermediate plotting frames (higher for smooth animations)')
+parser.add_argument('-pt', '--plot-type', default='video_frames', help='Video frame type (pdf or video_frames)')
+parser.add_argument('-l', '--learner-index', default=0, type=int, help='Index of learner to use (from config file)')
+args = parser.parse_args()
 
-with open('./data/shortrun_2D.yaml', 'rt') as fh:
+save_plots = args.save_plots
+plot_type = args.plot_type  # 'pdf'
+inter_frames = args.inter_frames
+
+with open(args.yaml_config, 'rt') as fh:
     wave = yaml.safe_load(fh)
 
 try:
@@ -33,7 +42,7 @@ except KeyError:
 
 n_xplot = 31
 keep_f = True
-learner_index = -2
+learner_index = args.learner_index
 
 log_hyp = np.log(wave['hyperparameters'])
 

@@ -25,7 +25,7 @@ random_wave = test_data.MultiWave(n_dimensions=d_x, **wave['wave_params'])
 log_hyp = np.log(wave['hyperparameters'])
 
 n_rel_train = 5
-n_abs_train = 5
+n_abs_train = 10
 
 n_xplot = 31
 n_posterior_samples = 3
@@ -94,7 +94,7 @@ if d_x <= 2:
                                                      t_l=r'True latent function, $f(x)$')
 
     # Posterior estimates
-    fig_p, ax_p, h_plotobj = \
+    fig_p, ax_p = \
         ptt.estimate_plots(x_test, f_true, mu_true, fhat, vhat, E_y, wave['rel_obs_params']['sigma'],
                            abs_y_samples, p_abs_y_post, p_rel_y_post,
                            x_abs, y_abs, x_rel[uvi_rel], fuv_rel, y_rel, n_posterior_samples=n_posterior_samples,
@@ -107,7 +107,7 @@ if d_x <= 2:
         print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}, p_err: {2:0.3f}".format(wrms, wrms2, p_err)
     else:
         print "WRMS: {0:0.3f}, WRMS_MC: {1:0.3f}".format(wrms, wrms2)
-    plt.show(block=False)
+    plt.show()
 
 else:
     print "Input state space dimension: {0} is too high to plot".format(d_x)
