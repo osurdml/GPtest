@@ -17,7 +17,7 @@ plt.rc('text', usetex=True)
 
 parser = argparse.ArgumentParser(description='Statruns for active learning with preference GP - wine data')
 parser.add_argument('-s', '--save-plots', dest='save_plots', action='store_true', help='Save output plots')
-parser.add_argument('-y', '--yaml-config', default='./data/shortrun_2D.yaml', help='YAML config file')
+parser.add_argument('-y', '--yaml-config', default='./config/shortrun_2D.yaml', help='YAML config file')
 parser.add_argument('-if', '--inter-frames', default=20, type=int, help='Intermediate plotting frames (higher for smooth animations)')
 parser.add_argument('-pt', '--plot-type', default='video_frames', help='Video frame type (pdf or video_frames)')
 parser.add_argument('-l', '--learner-index', default=0, type=int, help='Index of learner to use (from config file)')

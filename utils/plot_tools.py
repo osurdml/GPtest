@@ -277,13 +277,16 @@ def estimate_plots2D(xt, ft, mu_t, fhat, vhat, E_y, rel_sigma,
 
     cc = cm.get_cmap('Blues')
     norm_py = p_a_y/p_a_y.max()
+    legend_lines = [hEy]
+    legend_text = [r'Posterior mean, $E_{p(y|\mathcal{Y})}\left[y\right]$']
     h_points = []
     for y, py in zip(y_samples, norm_py):
         h_points.append(ax_a.scatter(xt[:, 0], xt[:, 1], y, s=py*15.0, marker='o', c=cc(py)))
 
     if xa_train.shape[0] > 0:
-        ax_a.plot(xa_train[:,0], xa_train[:,1], ya_train.flat, 'r^', color=lines[1])
-    ax_a.legend([hEy], [r'Posterior mean, $E_{p(y|\mathcal{Y})}\left[y\right]$'])
+        legend_lines.extend(ax_a.plot(xa_train[:,0], xa_train[:,1], ya_train.flat, 'r^', color=lines[1]))
+        legend_text.append(r'Absolute samples')
+    ax_a.legend(legend_lines, legend_text)
     # fig.colorbar(h_pap, ax=ax_a)
 
     return fig, (ax_l, ax_a)

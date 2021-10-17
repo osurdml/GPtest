@@ -6,15 +6,23 @@ import scipy.optimize as op
 import utils.plot_tools as ptt
 from utils import test_data
 import yaml
+import argparse
 # from scipy.stats import beta
-plt.rc('font',**{'family':'serif','sans-serif':['Computer Modern Roman']})
+plt.rc('font', **{'family': 'serif', 'sans-serif': ['Computer Modern Roman']})
 plt.rc('text', usetex=True)
 
-train_hyper = False
-use_test_data = False # test_data.data3 #
-verbose = 2
+parser = argparse.ArgumentParser(description='Basic demo of GP regression with absolute and relative queries')
+parser.add_argument('-y', '--yaml-config', default='./config/shortrun_2D.yaml', help='YAML config file')
+parser.add_argument('-nr', '--n-rel-train', default=5, type=int, help='Number of (randomly-sampled) relative training input points')
+parser.add_argument('-na', '--n-abs-train', default=10, type=int, help='Number of (randomly-sampled) absolute training input points')
+parser.add_argument('-nx', '--n-xplot', default=31, type=int, help='Resolution (number of points) of plot mesh')
+parser.add_argument('-v', '--verbosity', default=2, type=int, help='Verbosity level (0-3)')
+parser.add_argument('-t', '--train-hyper', action='store_true', help='Train hyperparameters (default false)')
+args = parser.parse_args()
 
-with open('./data/statruns_2D.yaml', 'rt') as fh:
+use_test_data = False   # test_data.data3 #
+
+with open(args.yaml_config, 'rt') as fh:
     wave = yaml.safe_load(fh)
 try:
     np.random.seed(wave['statrun_params']['randseed'])
@@ -24,10 +32,6 @@ d_x = wave['GP_params']['hyper_counts'][0]-1
 random_wave = test_data.MultiWave(n_dimensions=d_x, **wave['wave_params'])
 log_hyp = np.log(wave['hyperparameters'])
 
-n_rel_train = 5
-n_abs_train = 10
-
-n_xplot = 31
 n_posterior_samples = 3
 
 random_wave.print_values()
@@ -39,7 +43,7 @@ abs_obs_fun = GPpref.AbsObservationSampler(true_function, wave['GP_params']['abs
 # True function
 # This is a complicated (but memory efficient, maybe?) way to generate list of all grid points, there's probably a
 # better (itertools way)
-x_plot = np.linspace(0.0,1.0,n_xplot,dtype='float')
+x_plot = np.linspace(0.0, 1.0, args.n_xplot, dtype='float')
 x_test = ptt.make_meshlist(x_plot, d_x)
 f_true = abs_obs_fun.f(x_test)
 mu_true = abs_obs_fun.mean_link(x_test)
@@ -54,11 +58,11 @@ if d_x is 1:
 if use_test_data:
     x_rel, uvi_rel, y_rel, fuv_rel, x_abs, y_abs, mu_abs = use_test_data()
 else:
-    x_rel, uvi_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(n_rel_train, n_xdim=d_x)
-    x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(n_abs_train, n_xdim=d_x)
+    x_rel, uvi_rel, y_rel, fuv_rel = rel_obs_fun.generate_n_observations(args.n_rel_train, n_xdim=d_x)
+    x_abs, y_abs, mu_abs = abs_obs_fun.generate_n_observations(args.n_abs_train, n_xdim=d_x)
 
 # Construct GP object
-wave['GP_params']['verbose'] = verbose
+wave['GP_params']['verbose'] = args.verbosity
 model_kwargs = {'x_rel':x_rel, 'uvi_rel':uvi_rel, 'x_abs':x_abs, 'y_rel':y_rel, 'y_abs':y_abs,
                 'rel_kwargs': wave['rel_obs_params'], 'abs_kwargs': wave['abs_obs_params']}
 model_kwargs.update(wave['GP_params'])
@@ -66,8 +70,8 @@ prefGP = GPpref.PreferenceGaussianProcess(**model_kwargs)
 
 prefGP.set_hyperparameters(log_hyp)
 # If training hyperparameters, use external optimiser
-if train_hyper:
-    log_hyp = op.fmin(prefGP.calc_nlml,log_hyp)
+if args.train_hyper:
+    log_hyp = op.fmin(prefGP.calc_nlml, log_hyp)
 
 f = prefGP.calc_laplace(log_hyp)
 prefGP.print_hyperparameters()
@@ -115,10 +119,10 @@ else:
 
 
 ## SCRAP
-# p_y = np.zeros((n_ysamples, n_xplot))
+# p_y = np.zeros((n_ysamples, args.n_xplot))
 # y_samples = np.linspace(0.01, 0.99, n_ysamples)
 # iny = 1.0/n_ysamples
-# E_y2 = np.zeros(n_xplot)
+# E_y2 = np.zeros(args.n_xplot)
 #
 # normal_samples = np.random.normal(size=n_mcsamples)
 # for i,(fstar,vstar) in enumerate(zip(fhat, vhat.diagonal())):

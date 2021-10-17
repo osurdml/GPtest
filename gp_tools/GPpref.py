@@ -557,7 +557,7 @@ class PreferenceGaussianProcess(object):
             df = np.abs((f_new - f))
             if nloops > 0 and df.max() > f_error:
                 print("Laplace error increase, adding noise")
-                f_new = f_new + np.random.normal(0, df.max()/10.0, f_new.size)
+                f_new = f_new + np.random.normal(0, df.max()/10.0, f_new.shape)
             f_error = np.max(df)
 
             # print "F Error: " + str(f_error) #,lml

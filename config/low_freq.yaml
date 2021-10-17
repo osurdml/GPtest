@@ -1,0 +1,51 @@
+hyperparameters: [0.03, 1.0, 0.1, 1.0, 30.0]
+wave_params:
+  amp_range: [1.5, 2.0]
+  damp_range: [80.0, 120.0]
+  f_range: [10.0, 12.0]
+  n_components: 3
+  off_range: [0.01, 0.99]
+GP_params:
+  rel_likelihood: PrefProbit        
+  abs_likelihood: AbsBoundProbit
+  verbose: 0                       
+  hyper_counts: [2, 1, 2] 
+abs_obs_params: {sigma: 1.0, v: 40.0}             # Beta distribution parameters
+rel_obs_params: {sigma: 0.1}                        # Relative logistic parameters
+statrun_params:
+  n_queries: 20
+  n_rel_train: 0
+  n_abs_train: 1
+  randseed: 2
+  n_trials: 100
+  n_best_points: 30
+  n_xtest: 200
+  calc_relative_error: True
+  n_rel_samples: 5
+# High tau for softmax is more random
+learners:
+  - name: Random (rel)
+    model_type: ActiveLearner
+    obs_args: {p_rel: 1.0, n_rel_samples: 5}
+  - name: Random (abs)
+    model_type: ActiveLearner
+    obs_args: {p_rel: 0.0, n_rel_samples: 5}
+  - name: Random ($p_{rel}=0.5$)
+    model_type: ActiveLearner
+    obs_args: {p_rel: 0.5, n_rel_samples: 5}
+  - name: MaxVar (abs)
+    model_type: MaxVar
+    obs_args: {p_rel: 0.0}
+  - name: DetKUCB ($p_{rel}=-5.0, w_v=0.8, \tau=0.1$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -5.0, rel_tau: 0.1, abs_tau: 0.1, w_v: 0.8}
+  - name: DetKUCB ($p_{rel}=-10.0, w_v=0.8, \tau=1.0$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -10.0, rel_tau: 0.1, abs_tau: 0.2, w_v: 0.8}
+  - name: HUCB ($p_{rel}=-1.0, w_v=0.75, \tau_r=0.1, \tau_a=0.05$) (rel, abs)
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: -1.0, rel_tau: 0.1, abs_tau: 0.05, w_v: 0.75, selector: entropy}    
+  - name: LinScale
+    model_type: MaxVar
+    obs_args: {n_rel_samples: 5, p_rel: 1.0, rel_tau: 0.1, abs_tau: 0.05, w_v: 0.8}
+    update_p_rel: True
