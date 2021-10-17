@@ -2,7 +2,7 @@ hyperparameters: [0.03, 1.0, 0.1, 1.0, 30.0]
 wave_params:
   amp_range: [1.5, 2.0]
   damp_range: [80.0, 120.0]
-  f_range: [10.0, 12.0]
+  f_range: [5.0, 12.0]
   n_components: 3
   off_range: [0.01, 0.99]
 GP_params:
@@ -10,7 +10,7 @@ GP_params:
   abs_likelihood: AbsBoundProbit
   verbose: 0                       
   hyper_counts: [2, 1, 2] 
-abs_obs_params: {sigma: 1.0, v: 40.0}             # Beta distribution parameters
+abs_obs_params: {sigma: 1.0, v: 50.0}             # Beta distribution parameters
 rel_obs_params: {sigma: 0.1}                        # Relative logistic parameters
 statrun_params:
   n_queries: 20
